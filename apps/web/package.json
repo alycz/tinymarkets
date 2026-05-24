@@ -12,6 +12,7 @@
   "dependencies": {
     "@jet/shared": "workspace:*",
     "@jet/config": "workspace:*",
+    "lightweight-charts": "^5.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
