@@ -1,6 +1,7 @@
 import { MARKET } from '@jet/config';
 import {
   type CanonicalOrder,
+  type DemoSpikeResponse,
   type Fill,
   type IndicativeSnapshot,
   type MarketConfig,
@@ -10,6 +11,7 @@ import {
   type OrderId,
   type PlaceOrderRequest,
   type RampResolution,
+  type SignedShares,
   type Trade,
   type UserId,
   type UserSnapshot,
@@ -90,7 +92,7 @@ export class MarketSession {
     this.knownUsers = new Set();
     this.lastResolution = null;
 
-    this.oracle.start(marketId);
+    this.oracle.start(marketId, this.config, timestampMs(expiry));
     this.tickInterval = setInterval(() => this.tick(), 1000);
 
     return this.buildMarketState();
@@ -143,6 +145,22 @@ export class MarketSession {
 
   getLastResolution(): RampResolution | null {
     return this.lastResolution;
+  }
+
+  armDemoSpike(marketId: MarketId): Result<DemoSpikeResponse> {
+    if (!this.config || this.status === null) {
+      return err('UNKNOWN_MARKET', 'No active market');
+    }
+    if (this.config.marketId !== marketId) {
+      return err('UNKNOWN_MARKET', 'Market ID does not match active market');
+    }
+    if (this.status === 'resolved') {
+      return err('MARKET_NOT_OPEN', 'Market is already resolved');
+    }
+    if (!this.oracle.armScenario('NEAR_EXPIRY_SPIKE')) {
+      return err('UNKNOWN_MARKET', 'Oracle is not active for this market');
+    }
+    return { ok: true, scenario: 'NEAR_EXPIRY_SPIKE' };
   }
 
   placeOrder(req: PlaceOrderRequest): Result<{ order: CanonicalOrder; fills: Fill[] }> {
@@ -256,11 +274,11 @@ export class MarketSession {
   private resolveMarket(): void {
     if (!this.config || !this.marketCore) return;
 
-    const resolution = this.oracle.buildResolution(this.config);
+    const resolution = this.oracle.buildResolution(this.config, timestampMs(this.expiryMs ?? Date.now()));
     const now = timestampMs(Date.now());
 
     // Snapshot net positions BEFORE resolve() zeros them
-    const preResolveNets = new Map<UserId, import('@jet/shared').SignedShares>();
+    const preResolveNets = new Map<UserId, SignedShares>();
     for (const uid of this.marketCore.knownUserIds()) {
       preResolveNets.set(uid, this.marketCore.getPosition(uid).net);
     }

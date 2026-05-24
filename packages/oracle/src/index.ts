@@ -15,5 +15,7 @@ export { resolveMarket } from './resolve.js';
 export type { ResolveMarketParams } from './resolve.js';
 export { buildIndicative } from './indicative.js';
 export type { BuildIndicativeParams } from './indicative.js';
+export { buildFormingResolution } from './forming-resolution.js';
+export type { BuildFormingResolutionParams } from './forming-resolution.js';
 export { RampOracle } from './ramp-oracle.js';
 export type { RampOracleConfig } from './ramp-oracle.js';

@@ -16,7 +16,7 @@ export default function App() {
   const [config, setConfig] = useState<MarketConfig | null>(null);
 
   const { send, lastEvent, status } = useWebSocket(WS_URL);
-  const { marketStatus, msRemaining, oracleSnapshot, resolution } = useMarket(
+  const { marketStatus, msRemaining, serverTs, oracleSnapshot, resolution } = useMarket(
     marketId,
     send,
     lastEvent,
@@ -60,6 +60,7 @@ export default function App() {
           config={config}
           marketStatus={marketStatus}
           msRemaining={msRemaining}
+          serverTs={serverTs}
           wsStatus={status}
           oracleSnapshot={oracleSnapshot}
           resolution={resolution}

@@ -18,12 +18,14 @@ export function useMarket(
 ): {
   marketStatus: MarketStatus | null;
   msRemaining: number;
+  serverTs: TimestampMs | null;
   expiryMs: TimestampMs | null;
   oracleSnapshot: IndicativeSnapshot | null;
   resolution: RampResolution | null;
 } {
   const [marketStatus, setMarketStatus] = useState<MarketStatus | null>(null);
   const [msRemaining, setMsRemaining] = useState(0);
+  const [serverTs, setServerTs] = useState<TimestampMs | null>(null);
   const [expiryMs, setExpiryMs] = useState<TimestampMs | null>(null);
   const [oracleSnapshot, setOracleSnapshot] = useState<IndicativeSnapshot | null>(null);
   const [resolution, setResolution] = useState<RampResolution | null>(null);
@@ -32,6 +34,7 @@ export function useMarket(
   useEffect(() => {
     setMarketStatus(null);
     setMsRemaining(0);
+    setServerTs(null);
     setExpiryMs(null);
     setOracleSnapshot(null);
     setResolution(null);
@@ -55,6 +58,7 @@ export function useMarket(
         if (lastEvent.marketId === marketId) {
           setMarketStatus(lastEvent.status);
           setMsRemaining(lastEvent.msRemaining);
+          setServerTs(lastEvent.serverTs);
           setExpiryMs(lastEvent.expiryMs);
         }
         break;
@@ -71,5 +75,5 @@ export function useMarket(
     }
   }, [lastEvent, marketId]);
 
-  return { marketStatus, msRemaining, expiryMs, oracleSnapshot, resolution };
+  return { marketStatus, msRemaining, serverTs, expiryMs, oracleSnapshot, resolution };
 }

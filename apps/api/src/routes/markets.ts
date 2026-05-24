@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import type { MarketId } from '@jet/shared';
 import type { MarketSession } from '../session.js';
 
 export function createMarketsRoutes(session: MarketSession) {
@@ -18,6 +19,18 @@ export function createMarketsRoutes(session: MarketSession) {
       const state = session.startDemo();
       return reply.send({ ok: true, market: state });
     });
+
+    fastify.post<{ Params: { marketId: string } }>(
+      '/markets/:marketId/oracle/demo-spike',
+      async (req, reply) => {
+        const result = session.armDemoSpike(req.params.marketId as MarketId);
+        if (!result.ok) {
+          const status = result.error.code === 'UNKNOWN_MARKET' ? 404 : 409;
+          return reply.status(status).send(result);
+        }
+        return reply.send(result);
+      },
+    );
 
     fastify.get<{ Params: { marketId: string } }>(
       '/markets/:marketId',

@@ -62,6 +62,8 @@ export interface IndicativeSnapshot {
   dispersionState: DispersionState;
   venues: VenueHealth[];
   ts: TimestampMs;
+  /** Present only while the final RAMP_V1 window is forming; never settlement. */
+  formingResolution?: FormingResolution;
 }
 
 /** One 5s slice of the final settlement window. */
@@ -73,6 +75,23 @@ export interface PartitionResult {
   priceCents: UsdCents;
   validVenues: number;
   excludedVenues: number;
+}
+
+/** Live, non-settlement preview of the final RAMP_V1 window as partitions form. */
+export interface FormingPartitionResult extends PartitionResult {
+  complete: boolean;
+}
+
+export interface FormingResolution {
+  method: 'RAMP_V1';
+  window: {
+    startTs: TimestampMs;
+    endTs: TimestampMs;
+    partitionSeconds: number;
+    partitionCount: number;
+  };
+  formingPriceCents: UsdCents;
+  partitions: FormingPartitionResult[];
 }
 
 /**

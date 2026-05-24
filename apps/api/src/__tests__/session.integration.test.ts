@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import type {
   Balance,
+  CanonicalOrder,
   Fill,
   IndicativeSnapshot,
+  MarketId,
   MarketState,
   OrderBookDelta,
   OrderBookSnapshot,
@@ -36,6 +38,7 @@ function makeStubBroadcaster() {
   const marketStatuses: MarketStatusCall[] = [];
   const marketResolveds: MarketResolvedCall[] = [];
   const userResolutions: UserResolutionCall[] = [];
+  const oraclePrices: IndicativeSnapshot[] = [];
 
   const broadcaster = {
     bookDelta(d: OrderBookDelta) { bookDeltas.push(d); },
@@ -47,7 +50,7 @@ function makeStubBroadcaster() {
     marketStatus(s: MarketState) { marketStatuses.push(s); },
     marketResolved(state: MarketState, resolution: RampResolution) { marketResolveds.push({ state, resolution }); },
     userResolution(userId: UserId, event: Omit<UserResolutionEvent, 'type'>) { userResolutions.push({ userId, event }); },
-    oraclePrice(_snap: IndicativeSnapshot) {},
+    oraclePrice(snap: IndicativeSnapshot) { oraclePrices.push(snap); },
   };
 
   return {
@@ -60,6 +63,7 @@ function makeStubBroadcaster() {
     marketStatuses,
     marketResolveds,
     userResolutions,
+    oraclePrices,
   };
 }
 
@@ -152,7 +156,7 @@ describe('MarketSession integration', () => {
       priceCents: priceCents(55),
       size: shares(5),
       tif: 'GTC' as const,
-    }) as { ok: true; order: import('@jet/shared').CanonicalOrder; fills: Fill[] };
+    }) as { ok: true; order: CanonicalOrder; fills: Fill[] };
 
     const bad = session.cancelOrder(order.orderId, 'userB' as UserId);
     expect(bad.ok).toBe(false);
@@ -217,5 +221,36 @@ describe('MarketSession integration', () => {
     const resolvedUserIds = stub.userResolutions.map((r) => r.userId);
     expect(resolvedUserIds).toContain('userA');
     expect(resolvedUserIds).toContain('userB');
+  });
+
+  it('demo spike control arms only the active unresolved market', () => {
+    const noMarket = session.armDemoSpike('missing' as MarketId);
+    expect(noMarket.ok).toBe(false);
+    expect(noMarket.ok === false && noMarket.error.code).toBe('UNKNOWN_MARKET');
+
+    session.startDemo();
+    const marketId = session.getMarketId()!;
+
+    const wrongMarket = session.armDemoSpike('other-market' as MarketId);
+    expect(wrongMarket.ok).toBe(false);
+    expect(wrongMarket.ok === false && wrongMarket.error.code).toBe('UNKNOWN_MARKET');
+
+    const snapshotsBefore = stub.oraclePrices.length;
+    const armed = session.armDemoSpike(marketId);
+    expect(armed.ok).toBe(true);
+    expect(armed.ok === true && armed.scenario).toBe('NEAR_EXPIRY_SPIKE');
+    expect(stub.oraclePrices.length).toBeGreaterThan(snapshotsBefore);
+  });
+
+  it('demo spike control rejects resolved markets', () => {
+    vi.useFakeTimers();
+    session.startDemo();
+    const marketId = session.getMarketId()!;
+
+    vi.advanceTimersByTime(2 * 60 * 1000 + 3000);
+
+    const result = session.armDemoSpike(marketId);
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.error.code).toBe('MARKET_NOT_OPEN');
   });
 });

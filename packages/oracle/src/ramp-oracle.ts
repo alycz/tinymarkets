@@ -4,6 +4,7 @@ import {
   type MarketConfig,
   type MarketId,
   type RampResolution,
+  type TimestampMs,
   timestampMs,
 } from '@jet/shared';
 import type { VenueAdapter } from './venue-adapter.js';
@@ -29,17 +30,27 @@ export class RampOracle {
   private interval: ReturnType<typeof setInterval> | null = null;
   private callbacks: SnapshotCallback[] = [];
   private latestSnapshot: IndicativeSnapshot | null = null;
+  private scenario: ScenarioName;
+  private marketStartMs: number | null = null;
+  private config: MarketConfig | null = null;
+  private expiryTs: TimestampMs | null = null;
 
-  constructor(private readonly cfg: RampOracleConfig) {}
+  constructor(private readonly cfg: RampOracleConfig) {
+    this.scenario = cfg.scenario;
+  }
 
   onSnapshot(cb: SnapshotCallback): void {
     this.callbacks.push(cb);
   }
 
-  start(marketId: MarketId): void {
+  start(marketId: MarketId, config?: MarketConfig, expiryTs?: TimestampMs): void {
     this.marketId = marketId;
     const marketStartMs = this.now();
-    const { adapters } = buildScenario(this.cfg.scenario, this.cfg.seed, marketStartMs);
+    this.scenario = this.cfg.scenario;
+    this.marketStartMs = marketStartMs;
+    this.config = config ?? null;
+    this.expiryTs = expiryTs ?? null;
+    const { adapters } = buildScenario(this.scenario, this.cfg.seed, marketStartMs);
     this.adapters = adapters;
     this.interval = setInterval(() => this.tick(), ORACLE.sampleIntervalMs);
     this.tick();
@@ -56,11 +67,20 @@ export class RampOracle {
     return this.latestSnapshot;
   }
 
-  buildResolution(config: MarketConfig): RampResolution {
+  armScenario(scenario: ScenarioName): boolean {
+    if (!this.marketId || this.marketStartMs === null) return false;
+    this.scenario = scenario;
+    const { adapters } = buildScenario(this.scenario, this.cfg.seed, this.marketStartMs);
+    this.adapters = adapters;
+    this.tick();
+    return true;
+  }
+
+  buildResolution(config: MarketConfig, settlementTs?: TimestampMs): RampResolution {
     return resolveMarket({
       config,
       adapters: this.adapters,
-      now: timestampMs(this.now()),
+      now: settlementTs ?? timestampMs(this.now()),
       oracleCfg: ORACLE,
     });
   }
@@ -73,6 +93,8 @@ export class RampOracle {
     if (!this.marketId || this.adapters.length === 0) return;
     const snapshot = buildIndicative({
       marketId: this.marketId,
+      ...(this.config ? { config: this.config } : {}),
+      ...(this.expiryTs !== null ? { expiryTs: this.expiryTs } : {}),
       adapters: this.adapters,
       now: timestampMs(this.now()),
       oracleCfg: ORACLE,
