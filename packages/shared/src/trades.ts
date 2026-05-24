@@ -2,6 +2,23 @@ import type { Side } from './orders';
 import type { MarketId, OrderId, PriceCents, Shares, SignedShares, TimestampMs, TradeId, UsdCents, UserId } from './units';
 
 /**
+ * Raw fill event produced by the CLOB. Carries no kind — T3 (market-core)
+ * classifies the TradeKind from pre-trade signed positions and builds Trade/Fill.
+ */
+export interface Match {
+  tradeId: TradeId;
+  marketId: MarketId;
+  /** execution price (= resting/maker YES price) */
+  yesPriceCents: PriceCents;
+  size: Shares;
+  makerOrderId: OrderId;
+  takerOrderId: OrderId;
+  /** aggressor's chosen side, for UI activity feed */
+  takerSide: Side;
+  ts: TimestampMs;
+}
+
+/**
  * Unified Market Structure: every fill is normalized as
  * "buyer buys YES from seller at price p", then classified by the two
  * parties' PRE-trade signed positions. The kind drives open-interest and
