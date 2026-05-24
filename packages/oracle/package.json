@@ -1,0 +1,15 @@
+{
+  "name": "@jet/oracle",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "RAMP_V1 methodology + venue adapters / simulated feeds.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": { "typecheck": "tsc --noEmit" },
+  "dependencies": {
+    "@jet/shared": "workspace:*",
+    "@jet/config": "workspace:*"
+  },
+  "devDependencies": { "typescript": "^5.6.0" }
+}

@@ -1,0 +1,43 @@
+import type { Side } from './orders';
+import type { MarketId, OrderId, PriceCents, Shares, SignedShares, TimestampMs, TradeId, UsdCents, UserId } from './units';
+
+/**
+ * Unified Market Structure: every fill is normalized as
+ * "buyer buys YES from seller at price p", then classified by the two
+ * parties' PRE-trade signed positions. The kind drives open-interest and
+ * collateral movement (a single fill that crosses zero for a party is split).
+ */
+export type TradeKind =
+  | 'OPEN'         // both increase exposure -> OI up, new collateral enters
+  | 'TRANSFER_YES' // a YES position changes hands -> OI unchanged
+  | 'TRANSFER_NO'  // a short/NO position changes hands -> OI unchanged
+  | 'CLOSE';       // a YES and a NO cancel -> OI down, collateral released
+
+/** Public trade print (recent-trades feed). */
+export interface Trade {
+  tradeId: TradeId;
+  marketId: MarketId;
+  /** canonical YES price the trade executed at */
+  yesPriceCents: PriceCents;
+  size: Shares;
+  kind: TradeKind;
+  /** side from the aggressor's perspective, for the activity feed (Above/Below) */
+  takerSide: Side;
+  ts: TimestampMs;
+}
+
+/** Private fill notification for a single user/order. */
+export interface Fill {
+  tradeId: TradeId;
+  orderId: OrderId;
+  userId: UserId;
+  yesAction: 'BUY' | 'SELL';
+  yesPriceCents: PriceCents;
+  size: Shares;
+  kind: TradeKind;
+  /** the user's signed position AFTER applying this fill */
+  positionAfter: SignedShares;
+  /** the user's cash balance AFTER applying this fill */
+  balanceAfter: UsdCents;
+  ts: TimestampMs;
+}
