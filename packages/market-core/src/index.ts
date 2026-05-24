@@ -1,2 +1,6 @@
-// @jet/market-core — placeholder. To be implemented per BUILD_PLAN build order, step 3.
-export {};
+export { MarketCore } from './market';
+export { classifyKind, splitMatch } from './classify';
+export type { Segment } from './classify';
+export { markToMarket } from './mtm';
+export { settle } from './resolve';
+export type { ResolveResult } from './resolve';

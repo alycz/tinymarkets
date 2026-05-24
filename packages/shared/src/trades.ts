@@ -12,7 +12,11 @@ export interface Match {
   yesPriceCents: PriceCents;
   size: Shares;
   makerOrderId: OrderId;
+  makerUserId: UserId;
   takerOrderId: OrderId;
+  takerUserId: UserId;
+  /** taker's YES-book action: BUY = bought YES, SELL = sold YES */
+  takerYesAction: 'BUY' | 'SELL';
   /** aggressor's chosen side, for UI activity feed */
   takerSide: Side;
   ts: TimestampMs;
