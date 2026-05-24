@@ -8,7 +8,7 @@ import {
   shares,
   timestampMs,
 } from '@jet/shared';
-import { MockOracle } from './mock-oracle.js';
+import { RampOracle } from '@jet/oracle';
 
 type TickCallback = (state: MarketState) => void;
 type ResolvedCallback = (state: MarketState, resolution: RampResolution) => void;
@@ -20,7 +20,7 @@ export class MarketMachine {
   private tickCallbacks: TickCallback[] = [];
   private resolvedCallbacks: ResolvedCallback[] = [];
 
-  constructor(private oracle: MockOracle) {}
+  constructor(private oracle: RampOracle) {}
 
   onTick(cb: TickCallback): void {
     this.tickCallbacks.push(cb);
@@ -81,7 +81,7 @@ export class MarketMachine {
   private resolve(): void {
     if (!this.state) return;
 
-    const resolution = this.oracle.buildMockResolution(this.state.config);
+    const resolution = this.oracle.buildResolution(this.state.config);
     this.state.status = 'resolved';
     this.state.resolution = resolution;
 

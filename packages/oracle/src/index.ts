@@ -1,2 +1,19 @@
-// @jet/oracle — placeholder. To be implemented per BUILD_PLAN build order, steps 3 (mock) and 10 (deep RAMP_V1).
-export {};
+export type { VenueAdapter } from './venue-adapter.js';
+export type { BasePathFn } from './base-path.js';
+export { makeRandomWalkPath } from './base-path.js';
+export { makeRng } from './prng.js';
+export { SimulatedVenue } from './simulated-venue.js';
+export type { SimulatedVenueConfig, SpikeConfig, CrossedBookConfig } from './simulated-venue.js';
+export { buildScenario } from './scenarios.js';
+export type { ScenarioName, ScenarioResult } from './scenarios.js';
+export { midTwap, spreadTwap } from './twap.js';
+export { aggregatePartition } from './partition.js';
+export type { PartitionVenueData, AggPartitionResult, ExclusionRecord } from './partition.js';
+export { classifyDispersion, deriveConfidence } from './dispersion.js';
+export { inputHashFromSamples } from './hash.js';
+export { resolveMarket } from './resolve.js';
+export type { ResolveMarketParams } from './resolve.js';
+export { buildIndicative } from './indicative.js';
+export type { BuildIndicativeParams } from './indicative.js';
+export { RampOracle } from './ramp-oracle.js';
+export type { RampOracleConfig } from './ramp-oracle.js';
