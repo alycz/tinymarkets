@@ -4,7 +4,7 @@ import type {
   PriceCents,
 } from '@jet/shared';
 import { shares, timestampMs } from '@jet/shared';
-import type { OrderId } from '@jet/shared';
+import type { OrderId, UserId } from '@jet/shared';
 
 interface PriceLevel {
   yesPriceCents: PriceCents;
@@ -91,6 +91,18 @@ export class OrderBook {
     }
     order.status = 'CANCELLED';
     return order;
+  }
+
+  getOrder(orderId: OrderId): CanonicalOrder | undefined {
+    return this.orderIndex.get(orderId);
+  }
+
+  openOrdersFor(userId: UserId): CanonicalOrder[] {
+    const result: CanonicalOrder[] = [];
+    for (const order of this.orderIndex.values()) {
+      if (order.userId === userId) result.push(order);
+    }
+    return result;
   }
 
   getLevelSize(side: 'BUY' | 'SELL', price: PriceCents): number {

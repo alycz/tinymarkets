@@ -331,6 +331,39 @@ describe('match fields', () => {
     expect(m.ts).toBe(1000);
   });
 
+  it('getOrder returns resting order; undefined for filled/cancelled', () => {
+    const clob = makeClob();
+    const { order } = clob.placeOrder(req('YES', 'BUY', 55, 10));
+    expect(clob.getOrder(order.orderId)).toBeDefined();
+    expect(clob.getOrder(order.orderId)!.orderId).toBe(order.orderId);
+
+    // Fill it
+    clob.placeOrder({ ...req('YES', 'SELL', 55, 10), userId: 'u2' });
+    expect(clob.getOrder(order.orderId)).toBeUndefined();
+
+    // Cancelled order
+    const { order: o2 } = clob.placeOrder(req('YES', 'BUY', 40, 5));
+    clob.cancel(o2.orderId);
+    expect(clob.getOrder(o2.orderId)).toBeUndefined();
+  });
+
+  it('openOrdersFor filters by userId', () => {
+    const clob = makeClob();
+    clob.placeOrder(req('YES', 'BUY', 55, 10));          // u1
+    clob.placeOrder({ ...req('YES', 'SELL', 70, 5), userId: 'u2' }); // u2
+    clob.placeOrder(req('YES', 'BUY', 50, 3));            // u1
+
+    const u1Orders = clob.openOrdersFor('u1');
+    expect(u1Orders).toHaveLength(2);
+    expect(u1Orders.every(o => o.userId === 'u1')).toBe(true);
+
+    const u2Orders = clob.openOrdersFor('u2');
+    expect(u2Orders).toHaveLength(1);
+    expect(u2Orders[0]!.userId).toBe('u2');
+
+    expect(clob.openOrdersFor('u3')).toHaveLength(0);
+  });
+
   it('CLOB source files do not import Trade or TradeKind or Fill', async () => {
     // Compile-time guard: import the engine module and verify no Trade type leaks.
     // If engine.ts imported Trade/TradeKind/Fill, TypeScript would have caught it.
