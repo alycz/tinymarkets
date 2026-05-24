@@ -1,4 +1,4 @@
-# Jet Prediction Market — 2-Minute BTC Market (local demo)
+# Tiny Prediction Markets — 2-Minute BTC Market (local demo)
 
 A short-duration binary prediction market: **"Will BTC/USD be above $X in 2 minutes?"**
 Buy YES/NO between 1¢ and 99¢; the winning side pays $1/share at resolution.
