@@ -1,44 +1,25 @@
 import { buildServer } from './server.js';
-import { RampOracle } from '@jet/oracle';
-import { MarketMachine } from './market-machine.js';
+import { MarketSession } from './session.js';
+import { Broadcaster } from './broadcasts.js';
 import { WsManager } from './ws/manager.js';
-import { marketChannel, oracleChannel } from '@jet/shared';
-import { makeMarketStatusEvent } from './events.js';
 
 const API_HOST = process.env['API_HOST'] ?? '0.0.0.0';
 const API_PORT = parseInt(process.env['API_PORT'] ?? '3001', 10);
 
-const oracle = new RampOracle({ scenario: 'HONEST', seed: 12345 });
-const machine = new MarketMachine(oracle);
-const manager = new WsManager(
-  () => machine.getCurrentState(),
-  () => oracle.getLatestSnapshot(),
-);
+const session = new MarketSession();
+const manager = new WsManager();
+const broadcaster = new Broadcaster(manager);
 
-machine.onTick((state) => {
-  manager.broadcast(marketChannel(state.config.marketId), makeMarketStatusEvent(state));
-});
+session.setBroadcaster(broadcaster);
+manager.setSession(session);
 
-oracle.onSnapshot((snapshot) => {
-  manager.broadcast(oracleChannel(snapshot.marketId), {
-    type: 'oracle:price',
-    snapshot,
-  });
-});
-
-machine.onResolved((state, resolution) => {
-  const ch = marketChannel(state.config.marketId);
-  manager.broadcast(ch, makeMarketStatusEvent(state));
-  manager.broadcast(ch, { type: 'market:resolved', resolution });
-});
-
-const server = await buildServer(machine, manager);
+const server = await buildServer(session, manager);
 const address = await server.listen({ host: API_HOST, port: API_PORT });
 console.log(`API listening at ${address}`);
 
 async function shutdown() {
   await server.close();
-  machine.destroy();
+  session.destroy();
   process.exit(0);
 }
 

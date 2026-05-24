@@ -23,9 +23,15 @@ importers:
       '@fastify/websocket':
         specifier: ^11.0.0
         version: 11.2.0
+      '@jet/clob':
+        specifier: workspace:*
+        version: link:../../packages/clob
       '@jet/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@jet/market-core':
+        specifier: workspace:*
+        version: link:../../packages/market-core
       '@jet/oracle':
         specifier: workspace:*
         version: link:../../packages/oracle
@@ -48,6 +54,9 @@ importers:
       typescript:
         specifier: ^5.6.0
         version: 5.9.3
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.9(@types/node@25.9.1)
 
   apps/bots:
     dependencies:

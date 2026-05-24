@@ -134,6 +134,10 @@ export class MarketCore {
     return { trade, fills };
   }
 
+  knownUserIds(): UserId[] {
+    return Array.from(this.positions.keys());
+  }
+
   resolve(outcome: Side, _now: TimestampMs): ResolveResult {
     if (this.resolvedResult) return this.resolvedResult;
 

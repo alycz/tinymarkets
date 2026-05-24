@@ -7,7 +7,7 @@ import type {
   PlaceOrderRequest,
 } from '@jet/shared';
 import { shares, timestampMs } from '@jet/shared';
-import type { MarketId, OrderId, PriceCents } from '@jet/shared';
+import type { MarketId, OrderId, PriceCents, UserId } from '@jet/shared';
 import { OrderBook } from './book';
 import { makeIdGen } from './ids';
 import type { IdGen } from './ids';
@@ -162,5 +162,13 @@ export class Clob {
   recentMatches(limit = 100): Match[] {
     const buf = this.matchBuffer;
     return limit >= buf.length ? [...buf] : buf.slice(-limit);
+  }
+
+  getOrder(orderId: OrderId): CanonicalOrder | undefined {
+    return this.book.getOrder(orderId);
+  }
+
+  openOrdersFor(userId: UserId): CanonicalOrder[] {
+    return this.book.openOrdersFor(userId);
   }
 }
