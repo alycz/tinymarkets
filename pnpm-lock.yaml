@@ -70,6 +70,9 @@ importers:
       '@jet/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      lightweight-charts:
+        specifier: ^5.0.0
+        version: 5.2.0
       react:
         specifier: ^19.0.0
         version: 19.2.6
