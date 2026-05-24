@@ -11,6 +11,9 @@ importers:
       typescript:
         specifier: ^5.6.0
         version: 5.9.3
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.9(@types/node@25.9.1)
 
   apps/api:
     dependencies:
@@ -23,6 +26,9 @@ importers:
       '@jet/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@jet/oracle':
+        specifier: workspace:*
+        version: link:../../packages/oracle
       '@jet/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -64,6 +70,9 @@ importers:
       '@jet/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      lightweight-charts:
+        specifier: ^5.0.0
+        version: 5.2.0
       react:
         specifier: ^19.0.0
         version: 19.2.6
@@ -134,6 +143,9 @@ importers:
       typescript:
         specifier: ^5.6.0
         version: 5.9.3
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.9(@types/node@25.9.1)
 
   packages/shared:
     devDependencies:
