@@ -10,6 +10,7 @@ import type {
   Balance,
   Position,
   PriceCents,
+  TimestampMs,
 } from '@jet/shared';
 import { C, S } from '../theme.js';
 import type { WsStatus } from '../hooks/useWebSocket.js';
@@ -26,6 +27,7 @@ interface Props {
   config: MarketConfig;
   marketStatus: MarketStatus;
   msRemaining: number;
+  serverTs: TimestampMs | null;
   wsStatus: WsStatus;
   oracleSnapshot: IndicativeSnapshot | null;
   resolution: RampResolution | null;
@@ -56,6 +58,7 @@ export default function MarketPage({
   config,
   marketStatus,
   msRemaining,
+  serverTs,
   wsStatus,
   oracleSnapshot,
   resolution,
@@ -117,6 +120,11 @@ export default function MarketPage({
       oracleSnapshot={oracleSnapshot}
       resolution={resolution}
       resolutionPnl={resolutionPnl}
+      marketId={config.marketId}
+      marketStatus={marketStatus}
+      msRemaining={msRemaining}
+      serverTs={serverTs}
+      apiUrl={apiUrl}
     />
   );
 

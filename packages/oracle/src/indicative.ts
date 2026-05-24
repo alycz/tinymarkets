@@ -1,20 +1,23 @@
 import { ORACLE } from '@jet/config';
 import {
-  type Bps,
   type IndicativeSnapshot,
+  type MarketConfig,
   type MarketId,
   type TimestampMs,
-  type UsdCents,
   type VenueHealth,
+  type VenueId,
   bps,
   usdCents,
 } from '@jet/shared';
 import type { VenueAdapter } from './venue-adapter.js';
 import { classifyDispersion, deriveConfidence } from './dispersion.js';
 import { computeMad, computeMedian } from './math.js';
+import { buildFormingResolution } from './forming-resolution.js';
 
 export interface BuildIndicativeParams {
   marketId: MarketId;
+  config?: MarketConfig;
+  expiryTs?: TimestampMs;
   adapters: readonly VenueAdapter[];
   now: TimestampMs;
   oracleCfg: typeof ORACLE;
@@ -23,12 +26,14 @@ export interface BuildIndicativeParams {
 /** Build the live indicative price snapshot — equal-weight median of healthy venue mids. */
 export function buildIndicative({
   marketId,
+  config,
+  expiryTs,
   adapters,
   now,
   oracleCfg,
 }: BuildIndicativeParams): IndicativeSnapshot {
   const venues: VenueHealth[] = [];
-  const healthyMids: number[] = [];
+  const candidateMids: { venue: VenueId; mid: number; index: number }[] = [];
 
   for (const adapter of adapters) {
     const latest = adapter.latestAt(now);
@@ -98,13 +103,40 @@ export function buildIndicative({
       lastUpdateMs: latest.ts,
       healthy: true,
     });
-    healthyMids.push(mid);
+    candidateMids.push({ venue: adapter.venueId, mid, index: venues.length - 1 });
   }
 
-  const priceCents = usdCents(healthyMids.length > 0 ? computeMedian(healthyMids) : 10_000_000);
-  const madBpsValue = healthyMids.length > 1
-    ? Math.round((computeMad(healthyMids, computeMedian(healthyMids)) / (computeMedian(healthyMids) || 1)) * 10_000)
+  const candidateValues = candidateMids.map(v => v.mid);
+  const crossVenueMedian = candidateValues.length > 0 ? computeMedian(candidateValues) : 0;
+  const madBpsValue = candidateValues.length > 1
+    ? Math.round((computeMad(candidateValues, crossVenueMedian) / (crossVenueMedian || 1)) * 10_000)
     : 0;
+  const outlierThreshold = Math.max(oracleCfg.outlierBpsFloor, oracleCfg.madMultiple * madBpsValue);
+  const survivorMids: number[] = [];
+
+  for (const candidate of candidateMids) {
+    const deviationBps = crossVenueMedian > 0
+      ? Math.round((Math.abs(candidate.mid - crossVenueMedian) / crossVenueMedian) * 10_000)
+      : 0;
+    if (deviationBps > outlierThreshold) {
+      const venue = venues[candidate.index]!;
+      venues[candidate.index] = {
+        ...venue,
+        healthy: false,
+        excludedReason: 'OUTLIER',
+      };
+    } else {
+      survivorMids.push(candidate.mid);
+    }
+  }
+
+  const priceCents = usdCents(
+    survivorMids.length > 0
+      ? computeMedian(survivorMids)
+      : crossVenueMedian > 0
+        ? crossVenueMedian
+        : 10_000_000,
+  );
   const dispersionBpsBranded = bps(madBpsValue);
   const dispersionState = classifyDispersion(madBpsValue, oracleCfg);
   const { confidenceBps, confidence } = deriveConfidence(
@@ -112,6 +144,11 @@ export function buildIndicative({
     dispersionState,
     oracleCfg,
   );
+
+  const formingResolution =
+    config && expiryTs !== undefined
+      ? buildFormingResolution({ config, expiryTs, adapters, now, oracleCfg }) ?? undefined
+      : undefined;
 
   return {
     marketId,
@@ -122,5 +159,6 @@ export function buildIndicative({
     dispersionState,
     venues,
     ts: now,
+    ...(formingResolution ? { formingResolution } : {}),
   };
 }

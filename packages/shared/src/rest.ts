@@ -1,6 +1,7 @@
 import type { OrderBookSnapshot } from './orderbook';
 import type { CanonicalOrder, PlaceOrderRequest } from './orders';
 import type { Position, UserSnapshot } from './positions';
+import type { AttackCostEstimate } from './oracle';
 import type { Trade } from './trades';
 import type { MarketState } from './market';
 import type { Fill } from './trades';
@@ -18,6 +19,7 @@ import type { OrderId } from './units';
  *   POST /orders            (PlaceOrderRequest)        -> PlaceOrderResponse
  *   POST /orders/:orderId/cancel                       -> CancelOrderResponse
  *   POST /markets/start-demo                           -> StartDemoResponse
+ *   POST /markets/:marketId/oracle/demo-spike          -> DemoSpikeResponse
  */
 
 export type ApiErrorCode =
@@ -45,6 +47,10 @@ export interface TradesResponse { trades: Trade[]; }
 export interface UserResponse { snapshot: UserSnapshot; }
 export interface PositionsResponse { positions: Position[]; }
 export interface StartDemoResponse { market: MarketState; }
+export interface DemoSpikeResponse {
+  scenario: 'NEAR_EXPIRY_SPIKE';
+  attackCostEstimate?: AttackCostEstimate;
+}
 
 export type { PlaceOrderRequest };
 export type PlaceOrderResponse = Result<{ order: CanonicalOrder; fills: Fill[] }>;
