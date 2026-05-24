@@ -1,5 +1,5 @@
 import { buildServer } from './server.js';
-import { MockOracle } from './mock-oracle.js';
+import { RampOracle } from '@jet/oracle';
 import { MarketMachine } from './market-machine.js';
 import { WsManager } from './ws/manager.js';
 import { marketChannel, oracleChannel } from '@jet/shared';
@@ -8,7 +8,7 @@ import { makeMarketStatusEvent } from './events.js';
 const API_HOST = process.env['API_HOST'] ?? '0.0.0.0';
 const API_PORT = parseInt(process.env['API_PORT'] ?? '3001', 10);
 
-const oracle = new MockOracle();
+const oracle = new RampOracle({ scenario: 'HONEST', seed: 12345 });
 const machine = new MarketMachine(oracle);
 const manager = new WsManager(
   () => machine.getCurrentState(),

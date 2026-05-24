@@ -8,6 +8,16 @@ export type VenueId =
 
 export type QuoteCurrency = 'USD' | 'USDT';
 
+/** A raw top-of-book sample from a single venue, in integer USD cents. */
+export interface VenueQuote {
+  venue: VenueId;
+  quote: QuoteCurrency;
+  /** Already basis-adjusted to USD if the venue is USDT-quoted. */
+  bidCents: UsdCents;
+  askCents: UsdCents;
+  ts: TimestampMs;
+}
+
 export type VenueExclusionReason =
   | 'STALE'           // last update older than ORACLE.staleMs
   | 'MISSING'         // no quote
