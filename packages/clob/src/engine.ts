@@ -83,7 +83,10 @@ export class Clob {
           yesPriceCents: tradePrice,
           size: fillSize,
           makerOrderId: bestAsk.orderId,
+          makerUserId: bestAsk.userId,
           takerOrderId: order.orderId,
+          takerUserId: req.userId,
+          takerYesAction: 'BUY',
           takerSide: req.side,
           ts: timestampMs(ts),
         };
@@ -108,7 +111,10 @@ export class Clob {
           yesPriceCents: tradePrice,
           size: fillSize,
           makerOrderId: bestBid.orderId,
+          makerUserId: bestBid.userId,
           takerOrderId: order.orderId,
+          takerUserId: req.userId,
+          takerYesAction: 'SELL',
           takerSide: req.side,
           ts: timestampMs(ts),
         };

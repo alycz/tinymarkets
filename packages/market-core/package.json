@@ -6,10 +6,10 @@
   "description": "Market lifecycle, signed-position ledger, collateral, settlement.",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
-  "scripts": { "typecheck": "tsc --noEmit" },
+  "scripts": { "typecheck": "tsc --noEmit", "test": "vitest run" },
   "dependencies": {
     "@jet/shared": "workspace:*",
     "@jet/config": "workspace:*"
   },
-  "devDependencies": { "typescript": "^5.6.0" }
+  "devDependencies": { "typescript": "^5.6.0", "vitest": "^2.0.0" }
 }
