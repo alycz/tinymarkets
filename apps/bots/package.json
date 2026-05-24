@@ -8,7 +8,9 @@
   "types": "./src/index.ts",
   "scripts": {
     "dev": "tsx --watch src/mm/index.ts",
+    "dev:takers": "tsx --watch src/takers/index.ts",
     "start": "tsx src/mm/index.ts",
+    "start:takers": "tsx src/takers/index.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
