@@ -1,0 +1,9 @@
+{
+  "name": "@jet/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "React + Vite single market page. Consults the frontend-design skill when built.",
+  "scripts": { "dev": "vite", "build": "vite build", "typecheck": "tsc --noEmit" },
+  "dependencies": { "@jet/shared": "workspace:*", "@jet/config": "workspace:*" }
+}
