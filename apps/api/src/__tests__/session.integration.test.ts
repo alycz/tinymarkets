@@ -15,7 +15,7 @@ import type {
   UserResolutionEvent,
   VenueWeightedTwapResolution,
 } from '@jet/shared';
-import { oddsPriceCents, PAYOUT_CENTS, shares } from '@jet/shared';
+import { oddsPriceCents, PAYOUT_CENTS, shares, timestampMs } from '@jet/shared';
 import { MarketSession } from '../session.js';
 import type { Broadcaster } from '../broadcasts.js';
 
@@ -95,6 +95,7 @@ describe('MarketSession integration', () => {
 
   afterEach(() => {
     session.destroy();
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -141,7 +142,14 @@ describe('MarketSession integration', () => {
     expect(stub.trades).toHaveLength(1);
     expect(stub.trades[0]!.yesPriceCents).toBe(60);
     expect(stub.trades[0]!.size).toBe(10);
-    expect(stub.sharePrices.some((p) => p.source === 'trade' && p.yesPriceCents === 60)).toBe(true);
+    const tradePoint = stub.sharePrices.find((p) => p.source === 'trade' && p.yesPriceCents === 60);
+    expect(tradePoint).toMatchObject({
+      source: 'trade',
+      yesPriceCents: 60,
+      noPriceCents: 40,
+      tradeId: stub.trades[0]!.tradeId,
+      volume: 10,
+    });
     // 2 fills (one per party)
     expect(stub.userFills).toHaveLength(2);
     const fillUserIds = stub.userFills.map((f) => f.userId);
@@ -213,6 +221,86 @@ describe('MarketSession integration', () => {
       expect(session.getRecentTrades(1)[0]!.yesPriceCents).toBe(60);
       expect(session.getSharePriceSeries().at(-2)?.source).toBe('trade');
     }
+  });
+
+  it('records mid and mark share-price points from the YES book without using oracle prices', () => {
+    session.startDemo();
+    const marketId = session.getMarketId()!;
+
+    session.placeOrder({
+      userId: 'bidder' as UserId,
+      marketId,
+      side: 'YES' as const,
+      action: 'BUY' as const,
+      type: 'LIMIT' as const,
+      oddsPriceCents: oddsPriceCents(40),
+      size: shares(10),
+      tif: 'GTC' as const,
+    });
+
+    expect(session.getLatestSharePricePoint()).toMatchObject({
+      source: 'mark',
+      yesPriceCents: 40,
+      noPriceCents: 60,
+      bestBid: 40,
+    });
+
+    session.placeOrder({
+      userId: 'seller' as UserId,
+      marketId,
+      side: 'YES' as const,
+      action: 'SELL' as const,
+      type: 'LIMIT' as const,
+      oddsPriceCents: oddsPriceCents(60),
+      size: shares(10),
+      tif: 'GTC' as const,
+    });
+
+    expect(session.getLatestSharePricePoint()).toMatchObject({
+      source: 'mid',
+      yesPriceCents: 50,
+      noPriceCents: 50,
+      bestBid: 40,
+      bestAsk: 60,
+    });
+
+    const metrics = session.getSharePriceMetrics();
+    expect(metrics).toMatchObject({
+      latestYesPrice: 50,
+      latestNoPrice: 50,
+      bestBid: 40,
+      bestAsk: 60,
+      spread: 20,
+      mid: 50,
+      volumeLastMinute: 0,
+      highYesPrice: 50,
+      lowYesPrice: 40,
+    });
+    expect(session.getSharePriceSeries().every((p) => p.yesPriceCents >= 1 && p.yesPriceCents <= 99)).toBe(true);
+  });
+
+  it('rejects invalid share-price points that look like BTC/oracle prices', () => {
+    session.startDemo();
+    const before = session.getSharePriceSeries().length;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const unsafeSession = session as unknown as {
+      recordAndBroadcastSharePrice(point: SharePricePoint): void;
+    };
+
+    unsafeSession.recordAndBroadcastSharePrice({
+      marketId: session.getMarketId()!,
+      ts: timestampMs(Date.now()),
+      yesPriceCents: 10_000_000 as SharePricePoint['yesPriceCents'],
+      noPriceCents: -9_999_900 as SharePricePoint['noPriceCents'],
+      source: 'mark',
+    });
+
+    expect(session.getSharePriceSeries()).toHaveLength(before);
+    expect(warn).toHaveBeenCalledWith(
+      'Rejected invalid YES share price point; possible BTC/oracle leak',
+      expect.objectContaining({ yesPriceCents: 10_000_000 }),
+    );
+    warn.mockRestore();
   });
 
   it('cancel: wrong userId returns NOT_ORDER_OWNER', () => {

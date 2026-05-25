@@ -35,6 +35,10 @@ export function useSharePriceHistory(
 
   useEffect(() => {
     if (!lastEvent || !marketId) return;
+    if (lastEvent.type === 'share_price_snapshot' && lastEvent.marketId === marketId) {
+      setHistory(lastEvent.points.slice(-600));
+      return;
+    }
     if (lastEvent.type !== 'share_price' || lastEvent.point.marketId !== marketId) return;
     setHistory((prev) => [...prev, lastEvent.point].slice(-600));
   }, [lastEvent, marketId]);

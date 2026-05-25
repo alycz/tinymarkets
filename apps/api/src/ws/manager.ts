@@ -123,9 +123,13 @@ export class WsManager {
     } else if (kind === 'share') {
       const state = s.getMarketState();
       if (state?.config.marketId === id) {
-        for (const point of s.getSharePriceSeries()) {
-          this.sendTo(ws, { type: 'share_price', point });
-        }
+        const points = s.getSharePriceSeries();
+        this.sendTo(ws, {
+          type: 'share_price_snapshot',
+          marketId: state.config.marketId,
+          points,
+          latest: points.at(-1) ?? null,
+        });
       }
     } else if (kind === 'user') {
       const snap = s.getUserSnapshot(id);

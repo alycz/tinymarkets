@@ -65,6 +65,12 @@ export interface CountdownEvent {
   serverTs: TimestampMs;
 }
 export interface OraclePriceEvent { type: 'oracle_price'; snapshot: IndicativeSnapshot; }
+export interface SharePriceSnapshotEvent {
+  type: 'share_price_snapshot';
+  marketId: MarketId;
+  points: SharePricePoint[];
+  latest: SharePricePoint | null;
+}
 export interface SharePriceEvent { type: 'share_price'; point: SharePricePoint; }
 export interface BookSnapshotEvent { type: 'orderbook_snapshot'; book: OrderBookSnapshot; }
 export interface BookDeltaEvent { type: 'orderbook_delta'; delta: OrderBookDelta; }
@@ -109,6 +115,7 @@ export type ServerEvent =
   | MarketStatusEvent
   | CountdownEvent
   | OraclePriceEvent
+  | SharePriceSnapshotEvent
   | SharePriceEvent
   | BookSnapshotEvent
   | BookDeltaEvent
