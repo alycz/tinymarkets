@@ -41,6 +41,13 @@ export class WsClient {
     }
   }
 
+  refresh(channels: Channel[]): void {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      const msg: SubscribeMessage = { type: 'subscribe', channels };
+      this.ws.send(JSON.stringify(msg));
+    }
+  }
+
   connect(): void {
     if (this.destroyed) return;
 

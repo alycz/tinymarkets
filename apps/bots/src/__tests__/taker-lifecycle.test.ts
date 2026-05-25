@@ -3,7 +3,8 @@ import { oddsPriceCents } from '@jet/shared';
 import type { ApiErrorCode, PlaceOrderResponse } from '@jet/shared';
 import type { ApiClient } from '../mm/api-client.js';
 import type { TokenBucket } from '../takers/rate-limiter.js';
-import { TakerBot } from '../takers/taker.js';
+import { TakerSwarm } from '../takers/taker.js';
+import type { TakersConfig } from '../takers/config.js';
 
 function response(code: ApiErrorCode): PlaceOrderResponse {
   return {
@@ -15,9 +16,22 @@ function response(code: ApiErrorCode): PlaceOrderResponse {
   } as PlaceOrderResponse;
 }
 
-function makeBot(result: PlaceOrderResponse, onMarketInvalid = vi.fn()): {
+const config: TakersConfig = {
+  apiBaseUrl: 'http://localhost:3001',
+  wsUrl: 'ws://localhost:3001/ws',
+  numTakers: 75,
+  rateLimitTps: 6,
+  minIntervalMs: 250,
+  maxIntervalMs: 250,
+  volatilityScaleCents: 50_000,
+  minContrarianRatio: 0.2,
+  maxContrarianRatio: 0.35,
+  userIdPrefix: 'taker',
+};
+
+function makeSwarm(result: PlaceOrderResponse, onMarketInvalid = vi.fn()): {
   api: Pick<ApiClient, 'placeOrder'>;
-  bot: TakerBot;
+  swarm: TakerSwarm;
   onMarketInvalid: () => void;
 } {
   const api = {
@@ -30,21 +44,19 @@ function makeBot(result: PlaceOrderResponse, onMarketInvalid = vi.fn()): {
   return {
     api,
     onMarketInvalid,
-    bot: new TakerBot(
+    swarm: new TakerSwarm(
       api as unknown as ApiClient,
       'market-1',
-      {
-        userId: 'taker-test',
-        handle: 'test',
-        lean: 1,
-        fade: 0,
-        sizeScale: 1,
-        intervalMs: 250,
-      },
+      [{
+        userId: 'taker-001',
+        handle: 'taker001',
+        contrarianRatio: 0,
+        maxSlippageCents: 0,
+      }],
+      config,
       bucket as unknown as TokenBucket,
       () => ({
         fair: oddsPriceCents(90),
-        msRemaining: 60_000,
         bestPrices: {
           bestBid: oddsPriceCents(40),
           bestAsk: oddsPriceCents(50),
@@ -56,7 +68,7 @@ function makeBot(result: PlaceOrderResponse, onMarketInvalid = vi.fn()): {
   };
 }
 
-describe('TakerBot market lifecycle', () => {
+describe('TakerSwarm market lifecycle', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.spyOn(Math, 'random').mockReturnValue(0);
@@ -70,9 +82,9 @@ describe('TakerBot market lifecycle', () => {
   });
 
   it('stops and notifies the parent on UNKNOWN_MARKET', async () => {
-    const { api, bot, onMarketInvalid } = makeBot(response('UNKNOWN_MARKET'));
+    const { api, swarm, onMarketInvalid } = makeSwarm(response('UNKNOWN_MARKET'));
 
-    bot.start();
+    swarm.start();
     await vi.advanceTimersByTimeAsync(250);
     await vi.advanceTimersByTimeAsync(1_000);
 
@@ -81,9 +93,9 @@ describe('TakerBot market lifecycle', () => {
   });
 
   it('stops and notifies the parent on MARKET_NOT_OPEN', async () => {
-    const { api, bot, onMarketInvalid } = makeBot(response('MARKET_NOT_OPEN'));
+    const { api, swarm, onMarketInvalid } = makeSwarm(response('MARKET_NOT_OPEN'));
 
-    bot.start();
+    swarm.start();
     await vi.advanceTimersByTimeAsync(250);
     await vi.advanceTimersByTimeAsync(1_000);
 
@@ -92,15 +104,15 @@ describe('TakerBot market lifecycle', () => {
   });
 
   it('keeps retrying and does not notify the parent on other order errors', async () => {
-    const { api, bot, onMarketInvalid } = makeBot(response('INSUFFICIENT_BALANCE'));
+    const { api, swarm, onMarketInvalid } = makeSwarm(response('INSUFFICIENT_BALANCE'));
 
-    bot.start();
+    swarm.start();
     await vi.advanceTimersByTimeAsync(250);
     await vi.advanceTimersByTimeAsync(250);
 
     expect(api.placeOrder).toHaveBeenCalledTimes(2);
     expect(onMarketInvalid).not.toHaveBeenCalled();
 
-    bot.stop();
+    swarm.stop();
   });
 });

@@ -151,6 +151,10 @@ export class MarketCore {
       size: match.size,
       kind: firstKind,
       takerSide: match.takerSide,
+      takerUserId: match.takerUserId,
+      makerUserId: match.makerUserId,
+      takerYesAction: match.takerYesAction,
+      makerYesAction: match.takerYesAction === 'BUY' ? 'SELL' : 'BUY',
       ts: now,
     };
 

@@ -2,26 +2,32 @@ export interface MmConfig {
   apiBaseUrl: string;
   wsUrl: string;
   botUserId: string;
-  levels: number;
-  sizePerLevel: number;
-  halfSpreadCents: number;
-  levelStepCents: number;
+  levelSizes: number[];
+  baseSpreadCents: number;
   requoteMs: number;
-  baseSigma: number;
+  requoteFairMoveCents: number;
+  volatilityScaleCents: number;
 }
 
 export function loadConfig(): MmConfig {
   return {
     apiBaseUrl: readUrlEnv('API_BASE_URL', ['http:', 'https:'], 'http://localhost:3001'),
     wsUrl: readUrlEnv('WS_URL', ['ws:', 'wss:'], 'ws://localhost:3001/ws'),
-    botUserId: process.env['BOT_USER_ID'] ?? 'mm-bot',
-    levels: parseInt(process.env['LEVELS'] ?? '5', 10),
-    sizePerLevel: parseInt(process.env['SIZE_PER_LEVEL'] ?? '20', 10),
-    halfSpreadCents: parseInt(process.env['HALF_SPREAD_CENTS'] ?? '2', 10),
-    levelStepCents: parseInt(process.env['LEVEL_STEP_CENTS'] ?? '1', 10),
-    requoteMs: parseInt(process.env['REQUOTE_MS'] ?? '1500', 10),
-    baseSigma: parseFloat(process.env['BASE_SIGMA'] ?? '0.005'),
+    botUserId: process.env['BOT_USER_ID'] ?? 'market-maker-1',
+    levelSizes: parseLevelSizes(process.env['LEVEL_SIZES'] ?? '50,100,150'),
+    baseSpreadCents: parseInt(process.env['BASE_SPREAD_CENTS'] ?? '5', 10),
+    requoteMs: parseInt(process.env['REQUOTE_MS'] ?? '1000', 10),
+    requoteFairMoveCents: parseInt(process.env['REQUOTE_FAIR_MOVE_CENTS'] ?? '2', 10),
+    volatilityScaleCents: parseInt(process.env['FAIR_VALUE_VOL_SCALE_CENTS'] ?? '50000', 10),
   };
+}
+
+function parseLevelSizes(raw: string): number[] {
+  const sizes = raw
+    .split(',')
+    .map((part) => parseInt(part.trim(), 10))
+    .filter((size) => Number.isInteger(size) && size > 0);
+  return sizes.length > 0 ? sizes : [50, 100, 150];
 }
 
 function readUrlEnv(name: 'API_BASE_URL' | 'WS_URL', protocols: string[], fallback: string): string {

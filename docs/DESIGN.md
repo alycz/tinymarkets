@@ -213,9 +213,11 @@ The server clock is authoritative. `market_status` and `countdown` include `msRe
 
 There are two bot processes.
 
-The market maker waits until an open market exists, subscribes to market/oracle/book/user channels, and quotes a symmetric ladder on the YES book. It computes a fair YES probability from the indicative BTC price, strike, time remaining, and a configurable base sigma. It then places bids and asks around that fair value, cancels stale levels, and requotes periodically or when oracle updates arrive. It stops quoting when the market enters `resolving` or `resolved`.
+The market maker waits until an open market exists, subscribes to market/oracle/book/user channels, and quotes a symmetric ladder on the YES book as `market-maker-1`. It computes a fair YES probability from BTC distance to strike, time remaining, and a configurable volatility scale, then clamps that probability to `2..98` cents. Each tick it reconciles server-side open orders, cancels stale or duplicate levels, and tops up missing depth. Defaults are three levels per side sized `50 / 100 / 150`, a 5-cent base spread, 1-second requotes, and immediate requotes when fair value moves by at least 2 cents. It stops quoting when the market enters `resolving` or `resolved`.
 
-The noisy taker process starts multiple personas. Defaults are 30 takers, clamped to 1..100. Takers subscribe to the book, market, and oracle channels, track best bid/ask, compute the same fair YES probability, and occasionally submit IOC BUY orders. They lean YES when fair YES is higher and NO when fair YES is lower, with random persona lean, optional fading behavior, small sizes, jittered intervals, and a global token-bucket rate limit.
+The noisy taker process runs one swarm scheduler over multiple personas. Defaults are 75 takers named `taker-001` through `taker-075`, clamped to 50..100. Every 250..1500ms the scheduler chooses one persona, compares fair YES to the current book mid, and sends an IOC `BUY_YES` or `BUY_NO` order. `BUY_NO` uses the complement price and is normalized by the backend into a SELL-YES order, so it fills against YES bids. Each persona has a 20..35% contrarian probability, 0..2 cents of marketable slippage, and random 1..25 share sizes weighted toward small trades. Empty, stale, or crossed local books are skipped; crossed books trigger a fresh book snapshot.
+
+All bot activity goes through the same `POST /orders` endpoint as the UI. Bots never write recent trades, order-book levels, or YES share-price chart points directly; those update only from backend CLOB matches and market-session broadcasts.
 
 What is realistic:
 

@@ -32,6 +32,12 @@ pnpm dev:bots
 Alternatively:
 
 ```bash
+pnpm bots
+```
+
+For the full demo stack:
+
+```bash
 pnpm demo
 ```
 
@@ -50,6 +56,11 @@ VITE_WS_URL=ws://localhost:3001/ws
 VITE_DEMO_USER_ID=demo
 API_BASE_URL=http://localhost:3001
 WS_URL=ws://localhost:3001/ws
+BOT_USER_ID=market-maker-1
+NUM_TAKERS=75
+LEVEL_SIZES=50,100,150
+MIN_INTERVAL_MS=250
+MAX_INTERVAL_MS=1500
 ```
 
 Override them with shell env vars or local env files only when needed.

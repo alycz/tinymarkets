@@ -29,6 +29,8 @@ pnpm dev:bots
 
 The market maker quotes both sides of the YES book. The taker process sends noisy IOC flow so trades and account updates move during the 2-minute market.
 
+Default liquidity uses `market-maker-1` with three YES-book levels sized `50 / 100 / 150` and a 75-persona taker swarm (`taker-001` through `taker-075`). Takers submit normal `POST /orders` requests, including `BUY_NO` orders that the backend normalizes into SELL-YES orders at the complement price.
+
 ## 3. Show The Trading Loop
 
 1. Observe the primary YES share-price chart and the separate BTC oracle reference price.
@@ -36,7 +38,7 @@ The market maker quotes both sides of the YES book. The taker process sends nois
 3. Place a BUY YES order near the ask.
 4. Place a BUY NO order, or switch action/side to show the YES-book normalization.
 5. Confirm the account panel updates available cash, reserved order funds, signed position, average entry, unrealized PnL, and OI collateral share.
-6. Confirm recent trades update with side, price, size, and fill kind.
+6. Confirm recent trades update with trader, bought/sold side, side-specific price, size, and fill kind.
 
 ## 4. Arm The Oracle Demo
 

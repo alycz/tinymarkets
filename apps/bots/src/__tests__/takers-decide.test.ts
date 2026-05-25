@@ -1,87 +1,90 @@
 import { describe, expect, it } from 'vitest';
 import { oddsPriceCents } from '@jet/shared';
-import { decide } from '../takers/decide.js';
+import { decide, isCrossedBook } from '../takers/decide.js';
 import type { TakerPersona } from '../takers/persona.js';
 
 function persona(overrides: Partial<TakerPersona> = {}): TakerPersona {
   return {
-    userId: 'taker-test',
-    handle: 'test',
-    lean: 1,
-    fade: 0,
-    sizeScale: 1,
-    intervalMs: 3_000,
+    userId: 'taker-001',
+    handle: 'taker001',
+    contrarianRatio: 0,
+    maxSlippageCents: 1,
     ...overrides,
   };
 }
 
-function lcg(seed: number): () => number {
-  let state = seed >>> 0;
-  return () => {
-    state = (1664525 * state + 1013904223) >>> 0;
-    return state / 0x100000000;
-  };
-}
-
 describe('taker decide', () => {
-  it('strongly favors BUY YES when fair is high', () => {
-    const rng = lcg(7);
-    let yes = 0;
-    let no = 0;
-
-    for (let i = 0; i < 10_000; i++) {
-      const decision = decide({
-        fair: oddsPriceCents(85),
-        persona: persona(),
-        bestBid: oddsPriceCents(84),
-        bestAsk: oddsPriceCents(86),
-        msRemaining: 60_000,
-        rng,
-      });
-
-      if (decision?.side === 'YES') yes++;
-      if (decision?.side === 'NO') no++;
-    }
-
-    expect(yes).toBeGreaterThan(no * 4);
-  });
-
-  it('rejects BUY NO near expiry when YES fair is decisive', () => {
+  it('buys YES when fair is above the current mid', () => {
     const decision = decide({
-      fair: oddsPriceCents(98),
+      fair: oddsPriceCents(65),
       persona: persona(),
-      bestBid: oddsPriceCents(20),
-      bestAsk: oddsPriceCents(98),
-      msRemaining: 5_000,
-      rng: () => 0.99,
-    });
-
-    expect(decision).toBeNull();
-  });
-
-  it('skips forced BUY YES when there is no ask to take', () => {
-    const decision = decide({
-      fair: oddsPriceCents(85),
-      persona: persona(),
-      bestBid: oddsPriceCents(84),
-      bestAsk: null,
-      msRemaining: 60_000,
+      bestBid: oddsPriceCents(48),
+      bestAsk: oddsPriceCents(52),
       rng: () => 0,
     });
 
-    expect(decision).toBeNull();
+    expect(decision).toMatchObject({
+      intent: 'BUY_YES',
+      price: oddsPriceCents(52),
+    });
   });
 
-  it('suppresses fade personas when near-expiry fair has a clear winner', () => {
+  it('buys NO at the complement price when fair is below the current mid', () => {
     const decision = decide({
-      fair: oddsPriceCents(98),
-      persona: persona({ fade: 0.15 }),
-      bestBid: oddsPriceCents(20),
-      bestAsk: oddsPriceCents(98),
-      msRemaining: 5_000,
-      rng: () => 0.97,
+      fair: oddsPriceCents(35),
+      persona: persona(),
+      bestBid: oddsPriceCents(48),
+      bestAsk: oddsPriceCents(52),
+      rng: () => 0,
     });
 
-    expect(decision?.side).toBe('YES');
+    expect(decision).toMatchObject({
+      intent: 'BUY_NO',
+      price: oddsPriceCents(52),
+    });
+  });
+
+  it('can take the contrarian side', () => {
+    const decision = decide({
+      fair: oddsPriceCents(65),
+      persona: persona({ contrarianRatio: 1 }),
+      bestBid: oddsPriceCents(48),
+      bestAsk: oddsPriceCents(52),
+      rng: () => 0,
+    });
+
+    expect(decision?.intent).toBe('BUY_NO');
+  });
+
+  it('uses marketable slippage for BUY_NO complements', () => {
+    const values = [0.9, 0.9, 0];
+    const decision = decide({
+      fair: oddsPriceCents(35),
+      persona: persona({ maxSlippageCents: 2 }),
+      bestBid: oddsPriceCents(48),
+      bestAsk: oddsPriceCents(52),
+      rng: () => values.shift() ?? 0,
+    });
+
+    expect(decision).toMatchObject({
+      intent: 'BUY_NO',
+      price: oddsPriceCents(54),
+    });
+  });
+
+  it('skips empty or crossed books', () => {
+    expect(decide({
+      fair: oddsPriceCents(65),
+      persona: persona(),
+      bestBid: null,
+      bestAsk: oddsPriceCents(52),
+    })).toBeNull();
+    expect(decide({
+      fair: oddsPriceCents(65),
+      persona: persona(),
+      bestBid: oddsPriceCents(52),
+      bestAsk: oddsPriceCents(52),
+    })).toBeNull();
+    expect(isCrossedBook(oddsPriceCents(53), oddsPriceCents(52))).toBe(true);
   });
 });

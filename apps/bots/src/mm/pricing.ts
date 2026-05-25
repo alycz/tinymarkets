@@ -1,29 +1,32 @@
-import { oddsPriceCents, MIN_PRICE_CENTS, MAX_PRICE_CENTS } from '@jet/shared';
+import { MAX_PRICE_CENTS, MIN_PRICE_CENTS, oddsPriceCents } from '@jet/shared';
 import type { PriceCents, UsdCents } from '@jet/shared';
 
-// Prevents sigma from collapsing to exactly zero at the final millisecond.
-const SIGMA_FLOOR_MS = 250;
+const MIN_FAIR_CENTS = 2;
+const MAX_FAIR_CENTS = 98;
+
+export interface FairValueInput {
+  btcCents: UsdCents;
+  strikeCents: UsdCents;
+  msRemaining: number;
+  msTotal: number;
+  volatilityScaleCents: number;
+}
 
 /**
- * Maps BTC indicative price and time-remaining to a YES fair-value in 1..99c.
+ * Maps BTC oracle context into a YES probability price.
  *
- * Uses a logistic CDF on relative distance from strike, with volatility
- * shrinking as expiry approaches (time-scaled sigma). Near expiry with BTC
- * clearly off-strike, the curve collapses to a near step-function (~1c / 99c).
+ * The model follows the product spec: distance from strike is divided by a
+ * configurable volatility scale, then amplified as expiry approaches.
  */
-export function fairYesProbCents(
-  btcCents: UsdCents,
-  strikeCents: UsdCents,
-  msRemaining: number,
-  msTotal: number,
-  baseSigma: number,
-): PriceCents {
-  const rel = (btcCents - strikeCents) / strikeCents;
-  const sigma = baseSigma * Math.sqrt(Math.max(msRemaining, SIGMA_FLOOR_MS) / msTotal);
-  const p = 1 / (1 + Math.exp(-rel / sigma));
-  const yes = Math.round(100 * p);
-  const clamped = Math.min(MAX_PRICE_CENTS, Math.max(MIN_PRICE_CENTS, yes));
-  return oddsPriceCents(clamped);
+export function fairYesProbCents(input: FairValueInput): PriceCents {
+  const distance = (input.btcCents as number) - (input.strikeCents as number);
+  const timeRemainingSec = Math.max(input.msRemaining / 1_000, 1);
+  const totalSec = Math.max(input.msTotal / 1_000, 1);
+  const timeFactor = Math.sqrt(totalSec / timeRemainingSec);
+  const scale = Math.max(1, input.volatilityScaleCents);
+  const z = (distance / scale) * timeFactor;
+  const probability = 1 / (1 + Math.exp(-z));
+  return oddsPriceCents(clampInt(Math.round(100 * probability), MIN_FAIR_CENTS, MAX_FAIR_CENTS));
 }
 
 export interface QuoteLevel {
@@ -32,53 +35,67 @@ export interface QuoteLevel {
   size: number;
 }
 
+export interface QuoteLevelSpec {
+  offsetCents: number;
+  size: number;
+}
+
+export interface SpreadInput {
+  baseSpreadCents: number;
+  recentVolatilityCents: number;
+  msRemaining: number;
+  msTotal: number;
+}
+
+export function dynamicSpreadCents(input: SpreadInput): number {
+  const base = Math.max(3, input.baseSpreadCents);
+  const progress = 1 - clamp(input.msRemaining / Math.max(1, input.msTotal), 0, 1);
+  const timeComponent = progress > 0.8 ? 1 : 0;
+  const volatilityComponent = Math.min(4, Math.round(input.recentVolatilityCents / 10_000));
+  return clampInt(base + timeComponent + volatilityComponent, 3, 12);
+}
+
+export function buildLevelSpecs(spreadCents: number, sizes: number[]): QuoteLevelSpec[] {
+  const halfSpread = Math.max(2, spreadCents / 2);
+  const step = Math.max(2, Math.round(spreadCents / 2));
+  return sizes.map((size, index) => ({
+    offsetCents: halfSpread + index * step,
+    size,
+  }));
+}
+
 /**
- * Builds a symmetric quote ladder around `fair`.
+ * Builds a bid/ask ladder around the canonical YES fair value.
  *
- * Bid(k) = clamp(1, 99, fair - halfSpread - k * levelStep)
- * Ask(k) = clamp(1, 99, fair + halfSpread + k * levelStep)
- *
- * Duplicates from clamping at the 1/99 walls are collapsed so we never
- * over-quote at a single price level. Levels that would cross the other side
- * are dropped.
- *
- * Exposure cap (5 levels × 20 shares × 99c = $99 per side) fits well within
- * the $1,000 starting balance — no server-side top-up needed.
+ * Duplicate clamped wall levels are collapsed per side, and any level that
+ * would cross the opposite side is dropped.
  */
-export function buildQuoteLadder(
-  fair: PriceCents,
-  halfSpread: number,
-  levels: number,
-  levelStep: number,
-  sizePerLevel: number,
-): QuoteLevel[] {
+export function buildQuoteLadder(fair: PriceCents, levelSpecs: QuoteLevelSpec[]): QuoteLevel[] {
   const result: QuoteLevel[] = [];
   const bidsSeen = new Set<number>();
   const asksSeen = new Set<number>();
 
-  // Raw boundaries: bids must stay below the first ask, asks above the first bid.
-  const rawMinAsk = fair + halfSpread;
-  const rawMaxBid = fair - halfSpread;
+  for (const spec of levelSpecs) {
+    const bid = clampInt(Math.round((fair as number) - spec.offsetCents), MIN_PRICE_CENTS, MAX_PRICE_CENTS);
+    const ask = clampInt(Math.round((fair as number) + spec.offsetCents), MIN_PRICE_CENTS, MAX_PRICE_CENTS);
 
-  for (let k = 0; k < levels; k++) {
-    const bidRaw = fair - halfSpread - k * levelStep;
-    const askRaw = fair + halfSpread + k * levelStep;
-
-    const bidClamped = Math.min(MAX_PRICE_CENTS, Math.max(MIN_PRICE_CENTS, Math.round(bidRaw)));
-    const askClamped = Math.min(MAX_PRICE_CENTS, Math.max(MIN_PRICE_CENTS, Math.round(askRaw)));
-
-    // Drop if this bid crossed into ask territory or is a duplicate
-    if (bidClamped < rawMinAsk && !bidsSeen.has(bidClamped)) {
-      bidsSeen.add(bidClamped);
-      result.push({ side: 'BID', oddsPriceCents: oddsPriceCents(bidClamped), size: sizePerLevel });
+    if (bid < ask && !bidsSeen.has(bid)) {
+      bidsSeen.add(bid);
+      result.push({ side: 'BID', oddsPriceCents: oddsPriceCents(bid), size: spec.size });
     }
-
-    // Drop if this ask crossed into bid territory or is a duplicate
-    if (askClamped > rawMaxBid && !asksSeen.has(askClamped)) {
-      asksSeen.add(askClamped);
-      result.push({ side: 'ASK', oddsPriceCents: oddsPriceCents(askClamped), size: sizePerLevel });
+    if (ask > bid && !asksSeen.has(ask)) {
+      asksSeen.add(ask);
+      result.push({ side: 'ASK', oddsPriceCents: oddsPriceCents(ask), size: spec.size });
     }
   }
 
   return result;
+}
+
+function clampInt(n: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, Math.round(n)));
+}
+
+function clamp(n: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, n));
 }
