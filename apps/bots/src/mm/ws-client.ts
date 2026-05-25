@@ -21,6 +21,7 @@ export class WsClient {
   private channels: Channel[] = [];
   private backoffMs = 250;
   private readonly maxBackoffMs = 5_000;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private destroyed = false;
 
   constructor(
@@ -78,8 +79,12 @@ export class WsClient {
 
     this.ws.on('close', () => {
       if (this.destroyed) return;
-      console.log(`[ws] disconnected; reconnecting in ${this.backoffMs}ms`);
-      setTimeout(() => this.connect(), this.backoffMs);
+      const delay = this.backoffMs;
+      console.log(`[ws] disconnected; reconnecting in ${delay}ms`);
+      this.reconnectTimer = setTimeout(() => {
+        this.reconnectTimer = null;
+        this.connect();
+      }, delay);
       this.backoffMs = Math.min(this.backoffMs * 2, this.maxBackoffMs);
     });
 
@@ -90,7 +95,16 @@ export class WsClient {
 
   destroy(): void {
     this.destroyed = true;
-    this.ws?.close();
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.ws?.removeAllListeners();
+    try {
+      this.ws?.close();
+    } catch {
+      // ignore close failures during cleanup
+    }
     this.ws = null;
   }
 }
