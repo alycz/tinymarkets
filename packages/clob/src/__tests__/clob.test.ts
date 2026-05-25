@@ -245,11 +245,11 @@ describe('cancel', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 10. Snapshot/delta seq monotonic
+// 10. Snapshot/delta seq compatibility
 // ---------------------------------------------------------------------------
 
-describe('seq monotonic', () => {
-  it('every public call yields strictly increasing seq', () => {
+describe('seq compatibility', () => {
+  it('deltas advance seq while snapshots report the current seq without consuming one', () => {
     const clob = makeClob();
     const r1 = clob.placeOrder(req('YES', 'BUY', 55, 10));
     const r2 = clob.placeOrder(req('YES', 'SELL', 55, 10));
@@ -257,8 +257,21 @@ describe('seq monotonic', () => {
     const r3 = clob.cancel('nonexistent-id');
 
     expect(r2.delta.seq).toBeGreaterThan(r1.delta.seq);
-    expect(snap.seq).toBeGreaterThan(r2.delta.seq);
-    expect(r3.delta.seq).toBeGreaterThan(snap.seq);
+    expect(snap.seq).toBe(r2.delta.seq);
+    expect(r3.delta.seq).toBe(snap.seq + 1);
+  });
+
+  it('multiple clients can snapshot before a mutation and both accept the next delta', () => {
+    const clob = makeClob();
+    const clientA = clob.snapshot();
+    const clientB = clob.snapshot();
+
+    const { delta } = clob.placeOrder(req('YES', 'BUY', 55, 10));
+
+    expect(clientA.seq).toBe(0);
+    expect(clientB.seq).toBe(0);
+    expect(delta.seq).toBe(clientA.seq + 1);
+    expect(delta.seq).toBe(clientB.seq + 1);
   });
 });
 

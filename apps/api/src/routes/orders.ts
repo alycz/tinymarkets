@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { MarketSession } from '../session.js';
-import { validatePlaceOrder } from '../validators.js';
+import { validateOrderId, validatePlaceOrder, validateUserId } from '../validators.js';
 
 export function createOrdersRoutes(session: MarketSession) {
   return async function (fastify: FastifyInstance) {
@@ -21,19 +21,20 @@ export function createOrdersRoutes(session: MarketSession) {
     fastify.post<{ Params: { orderId: string } }>(
       '/orders/:orderId/cancel',
       async (req, reply) => {
-        const { orderId } = req.params;
-        const body = req.body as Record<string, unknown> | null;
-        const query = req.query as Record<string, unknown>;
-        const userId = (body?.['userId'] ?? query['userId']) as string | undefined;
-
-        if (!userId) {
-          return reply.status(400).send({
-            ok: false,
-            error: { code: 'VALIDATION', message: 'userId is required' },
-          });
+        const orderId = validateOrderId(req.params.orderId);
+        if (!orderId.ok) {
+          return reply.status(400).send({ ok: false, error: orderId.error });
         }
 
-        const result = session.cancelOrder(orderId, userId);
+        const body = req.body as Record<string, unknown> | null;
+        const query = req.query as Record<string, unknown>;
+        const userId = validateUserId(body?.['userId'] ?? query['userId']);
+
+        if (!userId.ok) {
+          return reply.status(400).send({ ok: false, error: userId.error });
+        }
+
+        const result = session.cancelOrder(orderId.value, userId.value);
         if (!result.ok) {
           const status =
             result.error.code === 'UNKNOWN_ORDER' ? 404

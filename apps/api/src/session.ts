@@ -15,6 +15,7 @@ import {
   type SignedShares,
   type Trade,
   type UserId,
+  type UserResolutionEvent,
   type UserSnapshot,
   shares,
   signedShares,
@@ -55,6 +56,7 @@ export class MarketSession {
 
   private knownUsers = new Set<UserId>();
   private lastResolution: RampResolution | null = null;
+  private lastUserResolutions = new Map<UserId, UserResolutionEvent>();
   private broadcaster: Broadcaster | null = null;
 
   constructor(opts?: { oracleScenario?: ScenarioName; seed?: number; demoMode?: DemoMode }) {
@@ -96,6 +98,7 @@ export class MarketSession {
     this.orderReserves = new Map();
     this.knownUsers = new Set();
     this.lastResolution = null;
+    this.lastUserResolutions = new Map();
 
     this.oracle.start(marketId, this.config, timestampMs(expiry));
     this.tickInterval = setInterval(() => this.tick(), 1000);
@@ -113,6 +116,7 @@ export class MarketSession {
     this.openedAtMs = null;
     this.config = null;
     this.orderReserves = new Map();
+    this.lastUserResolutions = new Map();
   }
 
   getMarketId(): MarketId | null {
@@ -151,6 +155,10 @@ export class MarketSession {
 
   getLastResolution(): RampResolution | null {
     return this.lastResolution;
+  }
+
+  getLastUserResolution(userId: UserId): UserResolutionEvent | null {
+    return this.lastUserResolutions.get(userId) ?? null;
   }
 
   armDemoSpike(marketId: MarketId): Result<DemoSpikeResponse> {
@@ -334,14 +342,17 @@ export class MarketSession {
       const bal = this.marketCore.getBalance(userId);
       const pos = this.marketCore.getPosition(userId);
       const netAtResolution = preResolveNets.get(userId) ?? signedShares(0);
-
-      this.broadcaster?.userResolution(userId, {
+      const userResolution: UserResolutionEvent = {
+        type: 'user:resolution',
         marketId: this.config.marketId,
         outcome: resolution.outcome,
         netAtResolution,
         payoutCents: usdCents(Math.max(0, bal.availableBalanceCents as number)),
         pnlCents,
-      });
+      };
+
+      this.lastUserResolutions.set(userId, userResolution);
+      this.broadcaster?.userResolution(userId, userResolution);
       this.broadcaster?.userBalance(userId, bal);
       this.broadcaster?.userPosition(userId, pos);
     }

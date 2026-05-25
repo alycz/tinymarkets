@@ -156,7 +156,7 @@ export class Clob {
   }
 
   snapshot(): OrderBookSnapshot {
-    return this.book.snapshot(this.marketId, this.nextSeq(), this.now());
+    return this.book.snapshot(this.marketId, this.seq, this.now());
   }
 
   recentMatches(limit = 100): Match[] {
