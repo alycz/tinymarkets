@@ -175,7 +175,7 @@ describe('WebSocket protocol hardening', () => {
     }
   });
 
-  it('sends a YES share-price snapshot on share channel subscribe and live increments later', () => {
+  it('replays YES share-price points when a share channel subscribes', () => {
     const session = new MarketSession();
     const manager = new WsManager({ heartbeatMs: 60_000 });
     const broadcaster = new Broadcaster(manager);
