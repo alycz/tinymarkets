@@ -49,6 +49,7 @@ async function runMarket(
   let msRemaining = market.msRemaining;
   let stopped = false;
   let timer: ReturnType<typeof setInterval> | null = null;
+  let guardTimer: ReturnType<typeof setInterval> | null = null;
   const activeTicks = new Set<Promise<void>>();
   let resolveMarket: (() => void) | null = null;
 
@@ -62,6 +63,10 @@ async function runMarket(
     if (timer !== null) {
       clearInterval(timer);
       timer = null;
+    }
+    if (guardTimer !== null) {
+      clearInterval(guardTimer);
+      guardTimer = null;
     }
     resolveMarket?.();
   };
@@ -106,6 +111,19 @@ async function runMarket(
   ]);
   ws.connect();
 
+  guardTimer = setInterval(() => {
+    void api.getCurrentMarket()
+      .then(current => {
+        if (!current || current.status !== 'open' || current.config.marketId !== marketId) {
+          console.warn(`[mm] active market ${marketId} disappeared/changed — stopping quotes and waiting for next market`);
+          finish();
+        }
+      })
+      .catch(err => {
+        console.warn('[mm] market guard error:', err);
+      });
+  }, 2_000);
+
   // Heartbeat: requote even when oracle is quiet
   timer = setInterval(doTick, config.requoteMs);
 
@@ -114,7 +132,11 @@ async function runMarket(
   finish();
   ws.destroy();
   await Promise.allSettled([...activeTicks]);
-  await quoter.cancelAll();
+  try {
+    await quoter.cancelAll();
+  } catch (err) {
+    console.warn('[mm] cancelAll skipped/failed during market cleanup:', err);
+  }
   console.log(`[mm] market ${marketId} closed — stopped quotes`);
 }
 
@@ -132,8 +154,8 @@ async function main(): Promise<void> {
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
-  console.log('[mm] waiting for an open market...');
   while (!shuttingDown) {
+    console.log('[mm] waiting for an open market...');
     const market = await waitForOpenMarket(api, () => shuttingDown);
     if (!market) break;
     await runMarket(api, config, market, stop => {

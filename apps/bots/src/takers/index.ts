@@ -46,13 +46,21 @@ async function runMarket(
   let fair: PriceCents = oddsPriceCents(50);
   let msRemaining = market.msRemaining;
   let marketOpen = true;
+  let stopped = false;
+  let guardTimer: ReturnType<typeof setInterval> | null = null;
   let resolveMarket: (() => void) | null = null;
 
   const done = new Promise<void>(resolve => {
     resolveMarket = resolve;
   });
   const finish = (): void => {
+    if (stopped) return;
+    stopped = true;
     marketOpen = false;
+    if (guardTimer !== null) {
+      clearInterval(guardTimer);
+      guardTimer = null;
+    }
     resolveMarket?.();
   };
   registerStop(finish);
@@ -86,6 +94,19 @@ async function runMarket(
   ]);
   ws.connect();
 
+  guardTimer = setInterval(() => {
+    void api.getCurrentMarket()
+      .then(current => {
+        if (!current || current.status !== 'open' || current.config.marketId !== marketId) {
+          console.warn(`[takers] active market ${marketId} disappeared/changed — stopping takers and returning to wait loop`);
+          finish();
+        }
+      })
+      .catch(err => {
+        console.warn('[takers] market guard error:', err);
+      });
+  }, 2_000);
+
   const bots = buildPersonas(config).map(persona => new TakerBot(
     api,
     marketId,
@@ -97,6 +118,7 @@ async function runMarket(
       bestPrices: book.bestPrices(),
       marketOpen,
     }),
+    finish,
   ));
 
   for (const bot of bots) bot.start();
@@ -104,6 +126,7 @@ async function runMarket(
 
   await done;
 
+  finish();
   for (const bot of bots) bot.stop();
   ws.destroy();
   book.reset();
@@ -124,8 +147,8 @@ async function main(): Promise<void> {
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
-  console.log('[takers] waiting for an open market...');
   while (!shuttingDown) {
+    console.log('[takers] waiting for an open market...');
     const market = await waitForOpenMarket(api, () => shuttingDown);
     if (!market) break;
     await runMarket(api, config, market, stop => {

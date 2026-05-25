@@ -22,6 +22,7 @@ export class TakerBot {
     private readonly persona: TakerPersona,
     private readonly bucket: TokenBucket,
     private readonly getState: () => TakerState,
+    private readonly onMarketInvalid: () => void = () => {},
   ) {}
 
   start(): void {
@@ -74,7 +75,14 @@ export class TakerBot {
       };
 
       const result = await this.api.placeOrder(req);
-      if (!result.ok && result.error.code !== 'MARKET_NOT_OPEN') {
+      if (!result.ok) {
+        if (result.error.code === 'UNKNOWN_MARKET' || result.error.code === 'MARKET_NOT_OPEN') {
+          console.warn(`[taker:${this.persona.userId}] market invalid (${result.error.code}) — stopping current market loop`);
+          this.stop();
+          this.onMarketInvalid();
+          return;
+        }
+
         console.error(`[taker:${this.persona.userId}] order rejected:`, result.error.message);
       }
     } catch (err) {
