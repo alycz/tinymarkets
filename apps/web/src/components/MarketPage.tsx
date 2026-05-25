@@ -9,10 +9,14 @@ import type {
   Trade,
   Balance,
   Position,
+  CanonicalOrder,
   PriceCents,
   TimestampMs,
+  UserResolutionEvent,
+  UsdCents,
 } from '@jet/shared';
 import { C, S } from '../theme.js';
+import { formatUsdCents } from '../format.js';
 import type { WsStatus } from '../hooks/useWebSocket.js';
 import type { PricePoint } from '../hooks/usePriceHistory.js';
 import MarketHeader from './MarketHeader.js';
@@ -35,7 +39,9 @@ interface Props {
   trades: Trade[];
   balance: Balance | null;
   position: Position | null;
-  resolutionPnl: number | null;
+  openOrders: CanonicalOrder[];
+  userResolution: UserResolutionEvent | null;
+  refreshUserSnapshot: () => Promise<void>;
   priceHistory: PricePoint[];
   userId: string;
   apiUrl: string;
@@ -66,7 +72,9 @@ export default function MarketPage({
   trades,
   balance,
   position,
-  resolutionPnl,
+  openOrders,
+  userResolution,
+  refreshUserSnapshot,
   priceHistory,
   userId,
   apiUrl,
@@ -106,11 +114,20 @@ export default function MarketPage({
       userId={userId}
       marketStatus={marketStatus}
       apiUrl={apiUrl}
+      onOrderAccepted={refreshUserSnapshot}
     />
   );
 
   const account = (
-    <AccountPanel balance={balance} position={position} contractMidCents={contractMid} />
+    <AccountPanel
+      balance={balance}
+      position={position}
+      contractMidCents={contractMid}
+      openOrders={openOrders}
+      userId={userId}
+      apiUrl={apiUrl}
+      onRefreshUser={refreshUserSnapshot}
+    />
   );
 
   const book = <OrderBookPanel snapshot={orderBookSnapshot} />;
@@ -119,7 +136,6 @@ export default function MarketPage({
     <OraclePanel
       oracleSnapshot={oracleSnapshot}
       resolution={resolution}
-      resolutionPnl={resolutionPnl}
       marketId={config.marketId}
       marketStatus={marketStatus}
       msRemaining={msRemaining}
@@ -139,6 +155,13 @@ export default function MarketPage({
   return (
     <div style={outerStyle}>
       {header}
+      {resolution && (
+        <ResolutionBanner
+          resolution={resolution}
+          thresholdCents={config.thresholdCents}
+          userResolution={userResolution}
+        />
+      )}
       {narrow ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: S.md }}>
           {chart}
@@ -169,6 +192,69 @@ export default function MarketPage({
   );
 }
 
+function ResolutionBanner({
+  resolution,
+  thresholdCents,
+  userResolution,
+}: {
+  resolution: RampResolution;
+  thresholdCents: UsdCents;
+  userResolution: UserResolutionEvent | null;
+}) {
+  const pnlCents = userResolution?.pnlCents ?? 0;
+  const payoutCents = userResolution?.payoutCents ?? (0 as UsdCents);
+  const netAtResolution = userResolution?.netAtResolution ?? 0;
+  const outcomeColor = resolution.outcome === 'YES' ? C.yes : C.no;
+
+  return (
+    <div style={{ ...resolutionStyle, borderColor: outcomeColor + '66' }}>
+      <div>
+        <div style={resolutionLabel}>Resolved</div>
+        <div style={{ fontSize: 28, lineHeight: 1, fontWeight: 900, color: outcomeColor }}>
+          {resolution.outcome}
+        </div>
+      </div>
+      <ResolutionStat label="RAMP_V1 reference price" value={formatUsdCents(resolution.resolutionPriceCents)} />
+      <ResolutionStat label="Strike" value={formatUsdCents(thresholdCents)} />
+      <ResolutionStat label="Your position at resolution" value={formatResolvedPosition(netAtResolution)} />
+      <ResolutionStat label="Payout" value={formatUsdCents(payoutCents)} emphasize />
+      <ResolutionStat
+        label="Final PnL"
+        value={`${pnlCents >= 0 ? '+' : ''}${formatUsdCents(pnlCents as UsdCents)}`}
+        color={pnlCents >= 0 ? C.yes : C.bad}
+        emphasize
+      />
+    </div>
+  );
+}
+
+function ResolutionStat({
+  label,
+  value,
+  color,
+  emphasize,
+}: {
+  label: string;
+  value: string;
+  color?: string;
+  emphasize?: boolean;
+}) {
+  return (
+    <div style={{ minWidth: 132 }}>
+      <div style={resolutionLabel}>{label}</div>
+      <div style={{ color: color ?? C.text, fontSize: emphasize ? 16 : 14, fontWeight: emphasize ? 800 : 700 }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function formatResolvedPosition(net: number): string {
+  if (net > 0) return `Long ${net} YES`;
+  if (net < 0) return `Long ${Math.abs(net)} NO`;
+  return 'Flat';
+}
+
 const outerStyle: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
@@ -182,6 +268,26 @@ const twoColStyle: CSSProperties = {
   display: 'grid',
   gridTemplateColumns: '2fr 1fr',
   gap: S.md,
+};
+
+const resolutionStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  flexWrap: 'wrap',
+  gap: S.lg,
+  background: C.panel,
+  border: `1px solid ${C.border}`,
+  borderRadius: 8,
+  padding: S.lg,
+};
+
+const resolutionLabel: CSSProperties = {
+  color: C.textMute,
+  fontSize: 10,
+  fontWeight: 800,
+  letterSpacing: '0.1em',
+  textTransform: 'uppercase',
+  marginBottom: S.xs,
 };
 
 const newMarketBtn: CSSProperties = {

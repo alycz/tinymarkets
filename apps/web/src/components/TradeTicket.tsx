@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
-import type { MarketStatus, Side, Action, UsdCents } from '@jet/shared';
+import type { MarketStatus, Side, Action, UsdCents, PlaceOrderResponse } from '@jet/shared';
 import { MIN_PRICE_CENTS, MAX_PRICE_CENTS, oddsPriceCents, shares } from '@jet/shared';
 import { C, S } from '../theme.js';
 import { formatUsdCents } from '../format.js';
@@ -11,9 +11,10 @@ interface Props {
   userId: string;
   marketStatus: MarketStatus;
   apiUrl: string;
+  onOrderAccepted: () => Promise<void>;
 }
 
-export default function TradeTicket({ marketId, userId, marketStatus, apiUrl }: Props) {
+export default function TradeTicket({ marketId, userId, marketStatus, apiUrl, onOrderAccepted }: Props) {
   const [side, setSide] = useState<Side>('YES');
   const [action, setAction] = useState<Action>('BUY');
   const [priceInput, setPriceInput] = useState('50');
@@ -53,13 +54,14 @@ export default function TradeTicket({ marketId, userId, marketStatus, apiUrl }: 
           tif: 'GTC',
         }),
       });
+      const body = (await res.json().catch(() => null)) as PlaceOrderResponse | null;
       if (res.status === 404) {
-        setHint('Order endpoint not live yet (T2)');
-      } else if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { message?: string };
-        setHint(body.message ?? `Error ${res.status}`);
+        setHint('Order rejected: market not found or inactive.');
+      } else if (!res.ok || !body?.ok) {
+        setHint(body && !body.ok ? body.error.message : `Order rejected (${res.status})`);
       } else {
         setHint('Order placed');
+        await onOrderAccepted();
       }
     } catch {
       setHint('Network error');
@@ -125,7 +127,9 @@ export default function TradeTicket({ marketId, userId, marketStatus, apiUrl }: 
 
       {marketStatus !== 'open' && (
         <div style={{ fontSize: 11, color: C.textMute, marginTop: S.xs }}>
-          Market {marketStatus} — trading disabled
+          {marketStatus === 'resolving' || marketStatus === 'resolved'
+            ? `Trading disabled while market is ${marketStatus}.`
+            : `Market ${marketStatus} — trading disabled`}
         </div>
       )}
       {hint && (

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import type {
   AttackCostEstimate,
   DemoScenarioResponse,
@@ -21,7 +21,6 @@ import Panel from './Panel.js';
 interface Props {
   oracleSnapshot: IndicativeSnapshot | null;
   resolution: RampResolution | null;
-  resolutionPnl: number | null;
   marketId: MarketId;
   marketStatus: MarketStatus;
   msRemaining: number;
@@ -46,7 +45,6 @@ type DemoState =
 export default function OraclePanel({
   oracleSnapshot,
   resolution,
-  resolutionPnl,
   marketId,
   marketStatus,
   msRemaining,
@@ -100,7 +98,6 @@ export default function OraclePanel({
     return (
       <PostResolution
         resolution={resolution}
-        resolutionPnl={resolutionPnl}
         demoControl={demoControl}
         attackCostEstimate={demo.attackCostEstimate}
       />
@@ -139,7 +136,7 @@ function PreResolution({
   snapshot: IndicativeSnapshot;
   msRemaining: number;
   serverTs: TimestampMs | null;
-  demoControl: React.ReactNode;
+  demoControl: ReactNode;
   attackCostEstimate: AttackCostEstimate | null;
 }) {
   const dispColor = DISPERSION_COLOR[snapshot.dispersionState];
@@ -226,13 +223,11 @@ function PreResolution({
 
 function PostResolution({
   resolution,
-  resolutionPnl,
   demoControl,
   attackCostEstimate,
 }: {
   resolution: RampResolution;
-  resolutionPnl: number | null;
-  demoControl: React.ReactNode;
+  demoControl: ReactNode;
   attackCostEstimate: AttackCostEstimate | null;
 }) {
   const dispColor = DISPERSION_COLOR[resolution.dispersionState];
@@ -245,7 +240,7 @@ function PostResolution({
           <Pill text={`${resolution.method} ${resolution.ruleVersion}`} color={C.accent} />
         </div>
         <div>
-          <div style={metaLabel}>REPLAYABLE INPUT HASH</div>
+          <div style={metaLabel}>REPLAYABLE HASH</div>
           <div style={hashStyle}>{resolution.inputHash}</div>
         </div>
         {demoControl}
@@ -281,17 +276,6 @@ function PostResolution({
             ))}
           </div>
         </div>
-        <div>
-          <div style={metaLabel}>MY PnL</div>
-          {resolutionPnl != null ? (
-            <div style={{ fontSize: 16, fontWeight: 700, color: resolutionPnl >= 0 ? C.yes : C.bad }}>
-              {resolutionPnl >= 0 ? '+' : ''}
-              {formatUsdCents(resolutionPnl as UsdCents)}
-            </div>
-          ) : (
-            <span style={{ color: C.textMute }}>--</span>
-          )}
-        </div>
       </div>
 
       <div style={twoSectionGridStyle}>
@@ -306,9 +290,10 @@ function PostResolution({
           {resolution.sourcesExcluded.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: S.xs }}>
               {resolution.sourcesExcluded.map((s) => (
-                <div key={s.venue} style={{ color: C.bad, fontSize: 12 }}>
-                  <strong>{s.venue}</strong> · {s.reason}
-                  {s.deviationBps != null ? ` · ${formatBps(s.deviationBps)}` : ''}
+                <div key={s.venue} style={excludedSourceStyle}>
+                  <strong>{s.venue}</strong>
+                  <Pill text={s.reason} color={s.reason === 'OUTLIER' ? C.bad : C.warn} small />
+                  {s.deviationBps != null && <span>{formatBps(s.deviationBps)}</span>}
                 </div>
               ))}
             </div>
@@ -363,6 +348,14 @@ function DemoControl({
           onClick={() => onArm('SUBTLE_DISLOCATION')}
         />
       </div>
+      <div style={demoCopyStyle}>
+        Injects a reproducible single-venue near-expiry manipulation into the simulated oracle feed.
+      </div>
+      {demo.status === 'armed' && (
+        <div style={{ ...demoCopyStyle, color: C.warn, fontWeight: 700 }}>
+          {demo.scenario === 'NEAR_EXPIRY_SPIKE' ? 'Spike' : 'Subtle dislocation'} armed. At resolution, the manipulated venue should be excluded or confidence lowered.
+        </div>
+      )}
       {demo.error && <div style={{ color: C.bad, fontSize: 11, marginTop: S.xs, textAlign: 'right' }}>{demo.error}</div>}
     </div>
   );
@@ -591,6 +584,27 @@ const sourceUsageGridStyle: CSSProperties = {
   gap: S.xs,
 };
 
+const excludedSourceStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  flexWrap: 'wrap',
+  gap: S.xs,
+  color: C.text,
+  fontSize: 12,
+  background: C.bad + '12',
+  border: `1px solid ${C.bad}33`,
+  borderRadius: 4,
+  padding: '5px 6px',
+};
+
+const demoCopyStyle: CSSProperties = {
+  color: C.textMute,
+  fontSize: 11,
+  lineHeight: 1.35,
+  marginTop: S.xs,
+  textAlign: 'right',
+};
+
 const demoButtonStyle: CSSProperties = {
   background: C.accent,
   color: '#fff',
@@ -603,11 +617,11 @@ const demoButtonStyle: CSSProperties = {
 };
 
 const hashStyle: CSSProperties = {
-  color: C.text,
+  color: C.textDim,
   fontFamily: 'monospace',
-  fontSize: 11,
+  fontSize: 10,
   overflowWrap: 'anywhere',
-  maxWidth: 380,
+  maxWidth: 340,
 };
 
 const costStyle: CSSProperties = {

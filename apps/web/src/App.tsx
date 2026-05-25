@@ -24,7 +24,13 @@ export default function App() {
   );
   const { snapshot: orderBookSnapshot } = useOrderBook(marketId, send, lastEvent, status);
   const trades = useTrades(marketId, send, lastEvent, status);
-  const { balance, position, resolutionPnl } = useUser(DEMO_USER_ID, send, lastEvent, status);
+  const {
+    balance,
+    position,
+    openOrders,
+    userResolution,
+    refreshUserSnapshot,
+  } = useUser(DEMO_USER_ID, marketId, API_URL, send, lastEvent, status);
   const priceHistory = usePriceHistory(oracleSnapshot);
 
   useEffect(() => {
@@ -68,7 +74,9 @@ export default function App() {
           trades={trades}
           balance={balance}
           position={position}
-          resolutionPnl={resolutionPnl}
+          openOrders={openOrders}
+          userResolution={userResolution}
+          refreshUserSnapshot={refreshUserSnapshot}
           priceHistory={priceHistory}
           userId={DEMO_USER_ID}
           apiUrl={API_URL}
