@@ -2,11 +2,11 @@ import type { OrderBookSnapshot } from './orderbook';
 import type { CanonicalOrder, PlaceOrderRequest } from './orders';
 import type { Balance, Position, UserSnapshot } from './positions';
 import type { AttackCostEstimate, IndicativeSnapshot, OracleDemoScenario } from './oracle';
-import type { SharePricePoint } from './share-price';
+import type { SharePriceMetrics, SharePricePoint } from './share-price';
 import type { Trade } from './trades';
 import type { MarketState } from './market';
 import type { Fill } from './trades';
-import type { OrderId } from './units';
+import type { MarketId, OrderId } from './units';
 
 /**
  * REST surface — commands and one-shot snapshots. Live data flows over WS (see ws.ts).
@@ -17,6 +17,7 @@ import type { OrderId } from './units';
  *   GET  /markets/:marketId/orderbook     -> OrderBookResponse
  *   GET  /markets/:marketId/trades        -> TradesResponse
  *   GET  /markets/:marketId/share-price-series -> SharePriceSeriesResponse
+ *   GET  /markets/:marketId/mark               -> SharePriceMarkResponse
  *   GET  /markets/:marketId/oracle-series -> OracleSeriesResponse
  *   GET  /users/:userId                   -> UserResponse
  *   GET  /users/:userId/balance           -> BalanceResponse
@@ -52,7 +53,16 @@ export type Result<T> = Ok<T> | Err;
 export interface MarketResponse { market: MarketState; }
 export interface OrderBookResponse { book: OrderBookSnapshot; }
 export interface TradesResponse { trades: Trade[]; }
-export interface SharePriceSeriesResponse { points: SharePricePoint[]; }
+export interface SharePriceSeriesResponse {
+  marketId: MarketId;
+  points: SharePricePoint[];
+  latest: SharePricePoint | null;
+}
+export interface SharePriceMarkResponse {
+  marketId: MarketId;
+  latest: SharePricePoint | null;
+  metrics: SharePriceMetrics | null;
+}
 export interface OracleSeriesResponse { snapshots: IndicativeSnapshot[]; }
 export interface UserResponse { snapshot: UserSnapshot; }
 export interface BalanceResponse { balance: Balance; }

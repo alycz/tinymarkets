@@ -189,8 +189,28 @@ describe('REST boundary validation', () => {
       url: `/markets/${market.config.marketId}/share-price-series`,
     });
     expect(shareSeries.statusCode).toBe(200);
-    expect(shareSeries.json()).toMatchObject({ ok: true });
+    expect(shareSeries.json()).toMatchObject({
+      ok: true,
+      marketId: market.config.marketId,
+      latest: expect.objectContaining({ marketId: market.config.marketId }),
+    });
     expect(shareSeries.json().points.length).toBeGreaterThan(0);
+
+    const mark = await server.inject({
+      method: 'GET',
+      url: `/markets/${market.config.marketId}/mark`,
+    });
+    expect(mark.statusCode).toBe(200);
+    expect(mark.json()).toMatchObject({
+      ok: true,
+      marketId: market.config.marketId,
+      latest: expect.objectContaining({ marketId: market.config.marketId }),
+      metrics: expect.objectContaining({
+        latestYesPrice: expect.any(Number),
+        latestNoPrice: expect.any(Number),
+        volumeLastMinute: expect.any(Number),
+      }),
+    });
 
     const oracleSeries = await server.inject({
       method: 'GET',

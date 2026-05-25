@@ -177,7 +177,38 @@ export function createMarketsRoutes(session: MarketSession) {
           });
         }
         const limit = req.query.limit ? parseInt(req.query.limit, 10) : 600;
-        return reply.send({ ok: true, points: session.getSharePriceSeries(limit) });
+        const points = session.getSharePriceSeries(limit);
+        return reply.send({
+          ok: true,
+          marketId: marketId.value,
+          points,
+          latest: session.getLatestSharePricePoint(),
+        });
+      },
+    );
+
+    fastify.get<{ Params: { marketId: string } }>(
+      '/markets/:marketId/mark',
+      async (req, reply) => {
+        const marketId = validateMarketId(req.params.marketId);
+        if (!marketId.ok) {
+          return reply.status(400).send({ ok: false, error: marketId.error });
+        }
+
+        const state = session.getMarketState();
+        if (!state || state.config.marketId !== marketId.value) {
+          return reply.status(404).send({
+            ok: false,
+            error: { code: 'UNKNOWN_MARKET', message: 'Market not found' },
+          });
+        }
+
+        return reply.send({
+          ok: true,
+          marketId: marketId.value,
+          latest: session.getLatestSharePricePoint(),
+          metrics: session.getSharePriceMetrics(),
+        });
       },
     );
 

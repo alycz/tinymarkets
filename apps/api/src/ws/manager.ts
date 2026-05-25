@@ -148,7 +148,7 @@ export class WsManager {
       const state = s.getMarketState();
       if (state?.config.marketId === id) {
         const points = s.getSharePriceSeries();
-        const latest = s.getLatestSharePrice();
+        const latest = s.getLatestSharePricePoint();
         this.sendTo(ws, {
           type: 'share_price_snapshot',
           marketId: state.config.marketId,

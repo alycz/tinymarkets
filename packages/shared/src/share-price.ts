@@ -1,4 +1,4 @@
-import type { MarketId, PriceCents, TimestampMs } from './units';
+import type { MarketId, PriceCents, Shares, TimestampMs, TradeId } from './units';
 
 export type SharePriceSource = 'trade' | 'mid' | 'mark';
 
@@ -11,4 +11,20 @@ export interface SharePricePoint {
   source: SharePriceSource;
   bestBid?: PriceCents;
   bestAsk?: PriceCents;
+  tradeId?: TradeId;
+  volume?: Shares;
+}
+
+export interface SharePriceMetrics {
+  latestYesPrice: PriceCents;
+  latestNoPrice: PriceCents;
+  bestBid?: PriceCents;
+  bestAsk?: PriceCents;
+  spread?: PriceCents;
+  mid?: PriceCents;
+  lastTradePrice?: PriceCents;
+  volumeLastMinute: Shares;
+  priceChangeSinceOpen: number;
+  highYesPrice: PriceCents;
+  lowYesPrice: PriceCents;
 }
