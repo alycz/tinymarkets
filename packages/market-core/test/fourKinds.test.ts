@@ -17,6 +17,7 @@ function makeMatch(
   makerUserId: string,
   price: number,
   size: number,
+  takerSide: Match['takerSide'] = 'YES',
 ): Match {
   return {
     tradeId: `t${++seq}` as Match['tradeId'],
@@ -26,7 +27,7 @@ function makeMatch(
     takerOrderId: `o-t${seq}` as Match['takerOrderId'],
     makerUserId,
     makerOrderId: `o-m${seq}` as Match['makerOrderId'],
-    takerSide: 'YES',
+    takerSide,
     yesPriceCents: oddsPriceCents(price),
     size: shares(size),
     ts: timestampMs(1_000),
@@ -35,6 +36,32 @@ function makeMatch(
 
 describe('four-kind classification and accounting', () => {
   const START = 100_000; // $1000 in cents
+
+  describe('public trade taker side', () => {
+    it('uses the taker display side for BUY YES', () => {
+      const core = new MarketCore(cfg);
+      const { trade } = core.applyMatch(makeMatch('alice', 'BUY', 'bob', 60, 1, 'YES'), timestampMs(1));
+      expect(trade.takerSide).toBe('YES');
+    });
+
+    it('uses the taker display side for SELL YES', () => {
+      const core = new MarketCore(cfg);
+      const { trade } = core.applyMatch(makeMatch('alice', 'SELL', 'bob', 60, 1, 'YES'), timestampMs(1));
+      expect(trade.takerSide).toBe('YES');
+    });
+
+    it('uses the taker display side for BUY NO', () => {
+      const core = new MarketCore(cfg);
+      const { trade } = core.applyMatch(makeMatch('alice', 'SELL', 'bob', 40, 1, 'NO'), timestampMs(1));
+      expect(trade.takerSide).toBe('NO');
+    });
+
+    it('uses the taker display side for SELL NO', () => {
+      const core = new MarketCore(cfg);
+      const { trade } = core.applyMatch(makeMatch('alice', 'BUY', 'bob', 60, 1, 'NO'), timestampMs(1));
+      expect(trade.takerSide).toBe('NO');
+    });
+  });
 
   describe('OPEN', () => {
     it('both flat: buyer pays p*n, seller pays (100-p)*n, OI up', () => {

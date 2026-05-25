@@ -150,7 +150,7 @@ export class MarketCore {
       yesPriceCents: match.yesPriceCents,
       size: match.size,
       kind: firstKind,
-      takerSide: isTakerBuyer ? 'YES' : 'NO',
+      takerSide: match.takerSide,
       ts: now,
     };
 

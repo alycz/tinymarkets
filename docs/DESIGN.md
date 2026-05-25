@@ -150,7 +150,7 @@ The invariant is:
 total locked collateral == openInterest * $1
 ```
 
-The tests cover the four fill kinds, zero-crossing splits, and a mixed sequence of trades that checks the invariant after each match.
+The demo exposes this as an "OI collateral share" per user. That display is a simplified allocation used to preserve the global invariant, not exact price-basis collateral for each trader. A production ledger should track the actual collateral basis paid by each side at each fill price.
 
 This structure is better than dual YES/NO token books for the demo because it avoids fragmented liquidity and duplicated matching logic. Users can still trade YES and NO in the UI, but the engine only has one price ladder and one net position per user per market. Transfers and closes become accounting classifications rather than separate token flows across two books.
 
@@ -342,7 +342,7 @@ The frontend is a single dense market page rather than a landing page. It priori
 - Market question, strike, status, countdown, and WebSocket status at the top.
 - BTC/USD indicative chart with a toggleable strike line.
 - Trade ticket for YES/NO BUY/SELL limit orders.
-- Account panel with available cash, locked collateral, position, average entry, and unrealized PnL.
+- Account panel with available cash, reserved order funds, OI collateral share, position, average entry, and unrealized PnL.
 - YES book ladder showing YES and complementary NO prices.
 - Recent trades with side, price, size, and fill kind.
 - Oracle panel with method, final-window countdown, live indicative price, dispersion, confidence, venue health, forming resolution partitions, final resolution, sources used/excluded, input hash, and user PnL.

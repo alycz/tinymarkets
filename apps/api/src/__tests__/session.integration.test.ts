@@ -14,7 +14,7 @@ import type {
   UserId,
   UserResolutionEvent,
 } from '@jet/shared';
-import { oddsPriceCents, shares } from '@jet/shared';
+import { oddsPriceCents, PAYOUT_CENTS, shares } from '@jet/shared';
 import { MarketSession } from '../session.js';
 import type { Broadcaster } from '../broadcasts.js';
 
@@ -31,6 +31,7 @@ type UserResolutionCall = { userId: UserId; event: Omit<UserResolutionEvent, 'ty
 
 function makeStubBroadcaster() {
   const bookDeltas: BookDeltaCall[] = [];
+  const bookSnapshots: OrderBookSnapshot[] = [];
   const trades: TradeCall[] = [];
   const userFills: UserFillCall[] = [];
   const userBalances: UserBalanceCall[] = [];
@@ -42,7 +43,7 @@ function makeStubBroadcaster() {
 
   const broadcaster = {
     bookDelta(d: OrderBookDelta) { bookDeltas.push(d); },
-    bookSnapshot(_b: OrderBookSnapshot) {},
+    bookSnapshot(b: OrderBookSnapshot) { bookSnapshots.push(b); },
     trade(t: Trade) { trades.push(t); },
     userFill(userId: UserId, fill: Fill) { userFills.push({ userId, fill }); },
     userBalance(userId: UserId, balance: Balance) { userBalances.push({ userId, balance }); },
@@ -56,6 +57,7 @@ function makeStubBroadcaster() {
   return {
     broadcaster: broadcaster as unknown as Broadcaster,
     bookDeltas,
+    bookSnapshots,
     trades,
     userFills,
     userBalances,
@@ -227,6 +229,104 @@ describe('MarketSession integration', () => {
     expect(result.ok === false && result.error.code).toBe('INSUFFICIENT_BALANCE');
     expect(session.getOrderBookSnapshot()!.bids).toHaveLength(0);
     expect(session.getUserSnapshot('underfunded' as UserId)!.balance.reservedForOrdersCents).toBe(0);
+  });
+
+  it('resolution cleanup releases resting order reserves and clears stale open orders', () => {
+    vi.useFakeTimers();
+    session.startDemo();
+    const marketId = session.getMarketId()!;
+
+    const placed = session.placeOrder({
+      userId: 'restingUser' as UserId,
+      marketId,
+      side: 'YES' as const,
+      action: 'BUY' as const,
+      type: 'LIMIT' as const,
+      oddsPriceCents: oddsPriceCents(60),
+      size: shares(10),
+      tif: 'GTC' as const,
+    }) as { ok: true; order: CanonicalOrder; fills: Fill[] };
+
+    let snap = session.getUserSnapshot('restingUser' as UserId)!;
+    expect(snap.balance.availableBalanceCents).toBe(100_000 - 600);
+    expect(snap.balance.reservedForOrdersCents).toBe(600);
+    expect(snap.openOrders).toHaveLength(1);
+
+    vi.advanceTimersByTime(2 * 60 * 1000 + 3000);
+
+    snap = session.getUserSnapshot('restingUser' as UserId)!;
+    expect(snap.balance.availableBalanceCents).toBe(100_000);
+    expect(snap.balance.reservedForOrdersCents).toBe(0);
+    expect(snap.openOrders).toHaveLength(0);
+    expect(session.getOrderBookSnapshot()!.bids).toHaveLength(0);
+    expect(session.getOrderBookSnapshot()!.asks).toHaveLength(0);
+
+    expect(stub.bookDeltas).toContainEqual(
+      expect.objectContaining({
+        changes: expect.arrayContaining([
+          expect.objectContaining({ side: 'BID', yesPriceCents: 60, size: 0 }),
+        ]),
+      }),
+    );
+    expect(stub.bookSnapshots.at(-1)?.bids).toHaveLength(0);
+    expect(stub.bookSnapshots.at(-1)?.asks).toHaveLength(0);
+    expect(session.cancelOrder(placed.order.orderId, 'restingUser' as UserId).ok).toBe(false);
+  });
+
+  it('user resolution events report actual payout, not final balance', () => {
+    vi.useFakeTimers();
+    session.startDemo();
+    const marketId = session.getMarketId()!;
+
+    session.placeOrder({
+      userId: 'yesHolder' as UserId,
+      marketId,
+      side: 'YES' as const,
+      action: 'BUY' as const,
+      type: 'LIMIT' as const,
+      oddsPriceCents: oddsPriceCents(60),
+      size: shares(5),
+      tif: 'GTC' as const,
+    });
+    session.placeOrder({
+      userId: 'noHolder' as UserId,
+      marketId,
+      side: 'YES' as const,
+      action: 'SELL' as const,
+      type: 'LIMIT' as const,
+      oddsPriceCents: oddsPriceCents(60),
+      size: shares(5),
+      tif: 'IOC' as const,
+    });
+    session.getUserSnapshot('observer' as UserId);
+
+    vi.advanceTimersByTime(2 * 60 * 1000 + 3000);
+
+    const yesEvent = stub.userResolutions.find((r) => r.userId === 'yesHolder')!.event;
+    const noEvent = stub.userResolutions.find((r) => r.userId === 'noHolder')!.event;
+    const observerEvent = stub.userResolutions.find((r) => r.userId === 'observer')!.event;
+    const payout = (PAYOUT_CENTS as number) * 5;
+
+    expect(yesEvent.netAtResolution).toBe(5);
+    expect(noEvent.netAtResolution).toBe(-5);
+    expect(observerEvent.netAtResolution).toBe(0);
+    expect(observerEvent.payoutCents).toBe(0);
+    expect(observerEvent.pnlCents).toBe(0);
+
+    if (yesEvent.outcome === 'YES') {
+      expect(yesEvent.payoutCents).toBe(payout);
+      expect(noEvent.payoutCents).toBe(0);
+      expect(session.getUserSnapshot('yesHolder' as UserId)!.balance.availableBalanceCents).toBe(100_000 - 60 * 5 + payout);
+      expect(session.getUserSnapshot('noHolder' as UserId)!.balance.availableBalanceCents).toBe(100_000 - 40 * 5);
+    } else {
+      expect(yesEvent.payoutCents).toBe(0);
+      expect(noEvent.payoutCents).toBe(payout);
+      expect(session.getUserSnapshot('yesHolder' as UserId)!.balance.availableBalanceCents).toBe(100_000 - 60 * 5);
+      expect(session.getUserSnapshot('noHolder' as UserId)!.balance.availableBalanceCents).toBe(100_000 - 40 * 5 + payout);
+    }
+
+    expect(yesEvent.payoutCents).not.toBe(session.getUserSnapshot('yesHolder' as UserId)!.balance.availableBalanceCents);
+    expect(noEvent.payoutCents).not.toBe(session.getUserSnapshot('noHolder' as UserId)!.balance.availableBalanceCents);
   });
 
   it('resolution path: emits resolving -> resolved -> market:resolved + user events', async () => {
