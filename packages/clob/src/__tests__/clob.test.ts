@@ -252,9 +252,60 @@ describe('seq compatibility', () => {
   it('deltas advance seq while snapshots report the current seq without consuming one', () => {
     const clob = makeClob();
     const r1 = clob.placeOrder(req('YES', 'BUY', 55, 10));
-    const r2 = clob.placeOrder(req('YES', 'SELL', 55, 10));
+    const snap1 = clob.snapshot();
+    const snap2 = clob.snapshot();
+    const r2 = clob.placeOrder(req('YES', 'BUY', 54, 10));
+    const cancelled = clob.cancel(r1.order.orderId);
+    const missing = clob.cancel('nonexistent-id');
+
+    expect(r1.delta.seq).toBe(1);
+    expect(snap1.seq).toBe(1);
+    expect(snap2.seq).toBe(1);
+    expect(r2.delta.seq).toBe(2);
+    expect(cancelled.delta.seq).toBe(3);
+    expect(missing.delta.seq).toBe(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 11. Clear open orders
+// ---------------------------------------------------------------------------
+
+describe('clearOpenOrders', () => {
+  it('removes all resting orders, reports removed levels, and increments seq once', () => {
+    const clob = makeClob();
+    const bid = clob.placeOrder(req('YES', 'BUY', 55, 10)).order;
+    const ask = clob.placeOrder({ ...req('YES', 'SELL', 70, 5), userId: 'u2' }).order;
+
+    const { orders, delta } = clob.clearOpenOrders();
+
+    expect(orders.map((o) => o.orderId).sort()).toEqual([ask.orderId, bid.orderId].sort());
+    expect(orders.every((o) => o.status === 'CANCELLED')).toBe(true);
+    expect(delta?.seq).toBe(3);
+    expect(delta?.changes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ side: 'BID', yesPriceCents: 55, size: 0 }),
+        expect.objectContaining({ side: 'ASK', yesPriceCents: 70, size: 0 }),
+      ]),
+    );
+    expect(clob.getOrder(bid.orderId)).toBeUndefined();
+    expect(clob.getOrder(ask.orderId)).toBeUndefined();
+    expect(clob.openOrdersFor('u1')).toHaveLength(0);
+    expect(clob.openOrdersFor('u2')).toHaveLength(0);
+
     const snap = clob.snapshot();
-    const r3 = clob.cancel('nonexistent-id');
+    expect(snap.seq).toBe(3);
+    expect(snap.bids).toHaveLength(0);
+    expect(snap.asks).toHaveLength(0);
+  });
+
+  it('does not increment seq when there are no resting orders to clear', () => {
+    const clob = makeClob();
+    const r1 = clob.placeOrder(req('YES', 'BUY', 55, 10));
+    clob.cancel(r1.order.orderId);
+    const before = clob.snapshot();
+
+    const { orders, delta } = clob.clearOpenOrders();
 
     expect(r2.delta.seq).toBeGreaterThan(r1.delta.seq);
     expect(snap.seq).toBe(r2.delta.seq);
@@ -276,7 +327,7 @@ describe('seq compatibility', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 11. Delta correctness — fully consumed level shows size 0
+// 12. Delta correctness — fully consumed level shows size 0
 // ---------------------------------------------------------------------------
 
 describe('delta correctness', () => {
@@ -305,7 +356,7 @@ describe('delta correctness', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 12. NO-side normalization end-to-end
+// 13. NO-side normalization end-to-end
 // ---------------------------------------------------------------------------
 
 describe('NO-side normalization end-to-end', () => {
@@ -323,7 +374,7 @@ describe('NO-side normalization end-to-end', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 13. Match fields
+// 14. Match fields
 // ---------------------------------------------------------------------------
 
 describe('match fields', () => {
