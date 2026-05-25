@@ -1,9 +1,19 @@
 import { useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import type { Balance, CanonicalOrder, Position, PriceCents, Result, UsdCents } from '@jet/shared';
+import type {
+  Balance,
+  CanonicalOrder,
+  Fill,
+  Position,
+  PriceCents,
+  Result,
+  UsdCents,
+  UserResolutionEvent,
+  VenueWeightedTwapResolution,
+} from '@jet/shared';
 import { MARKET } from '@jet/config';
 import { C, S } from '../theme.js';
-import { formatUsdCents, formatPriceCents } from '../format.js';
+import { formatAge, formatUsdCents, formatPriceCents } from '../format.js';
 import Panel from './Panel.js';
 
 interface Props {
@@ -11,6 +21,9 @@ interface Props {
   position: Position | null;
   contractMidCents: PriceCents | null;
   openOrders: CanonicalOrder[];
+  recentFills: Fill[];
+  resolution: VenueWeightedTwapResolution | null;
+  userResolution: UserResolutionEvent | null;
   userId: string;
   apiUrl: string;
   onRefreshUser: () => Promise<void>;
@@ -21,6 +34,9 @@ export default function AccountPanel({
   position,
   contractMidCents,
   openOrders,
+  recentFills,
+  resolution,
+  userResolution,
   userId,
   apiUrl,
   onRefreshUser,
@@ -31,16 +47,30 @@ export default function AccountPanel({
   const reserved = balance?.reservedForOrdersCents ?? (0 as UsdCents);
   const locked = balance?.lockedSettlementCollateralCents ?? (0 as UsdCents);
 
-  const net = position?.net ?? 0;
+  const liveNet = position?.net ?? 0;
+  const net = resolution && userResolution ? userResolution.netAtResolution : liveNet;
   const avgEntry = position?.avgEntryPriceCents ?? null;
 
   let unrealizedPnl: number | null = null;
-  if (net !== 0 && avgEntry !== null && contractMidCents !== null) {
-    unrealizedPnl = net * (contractMidCents - avgEntry);
+  if (!resolution && liveNet !== 0 && avgEntry !== null && contractMidCents !== null) {
+    unrealizedPnl = liveNet * (contractMidCents - avgEntry);
   }
 
-  const sideLabel = net > 0 ? 'LONG YES' : net < 0 ? 'LONG NO' : 'FLAT';
   const sideColor = net > 0 ? C.yes : net < 0 ? C.no : C.textMute;
+  const absNet = Math.abs(net);
+  const markValueCents =
+    contractMidCents !== null && liveNet !== 0
+      ? liveNet > 0
+        ? (liveNet * contractMidCents as UsdCents)
+        : (Math.abs(liveNet) * (100 - contractMidCents) as UsdCents)
+      : null;
+  const yesPayoutCents = (net > 0 ? absNet * 100 : 0) as UsdCents;
+  const noPayoutCents = (net < 0 ? absNet * 100 : 0) as UsdCents;
+  const userWon =
+    resolution && userResolution && userResolution.netAtResolution !== 0
+      ? (resolution.outcome === 'YES' && userResolution.netAtResolution > 0) ||
+        (resolution.outcome === 'NO' && userResolution.netAtResolution < 0)
+      : null;
 
   async function cancelOrder(order: CanonicalOrder) {
     setCancellingOrderId(order.orderId);
@@ -73,23 +103,17 @@ export default function AccountPanel({
         Demo display; system invariant is preserved. Production would track exact price-basis collateral per user.
       </div>
       <div style={{ height: 1, background: C.border, margin: `${S.sm}px 0` }} />
-      <Row
-        label="Position"
-        value={
-          net !== 0 ? (
-            <span>
-              <span style={{ color: sideColor, fontWeight: 600 }}>{sideLabel}</span>
-              {' '}
-              <span style={{ color: C.text }}>{Math.abs(net)} shares</span>
-            </span>
-          ) : (
-            <span style={{ color: C.textMute }}>FLAT</span>
-          )
-        }
-      />
-      {net !== 0 && avgEntry !== null && (
+      <Row label="Position" value={<span style={{ color: sideColor, fontWeight: 700 }}>{formatPosition(net)}</span>} />
+      {liveNet !== 0 && avgEntry !== null && !resolution && (
         <Row label="Avg entry" value={formatPriceCents(avgEntry)} dim />
       )}
+      <Row
+        label="Mark value"
+        value={markValueCents !== null && !resolution ? formatUsdCents(markValueCents) : <span style={{ color: C.textMute }}>--</span>}
+        dim={markValueCents === null || !!resolution}
+      />
+      <Row label="Payout if YES wins" value={formatUsdCents(yesPayoutCents)} dim={yesPayoutCents === 0} />
+      <Row label="Payout if NO wins" value={formatUsdCents(noPayoutCents)} dim={noPayoutCents === 0} />
       <Row
         label="Unrealized PnL"
         value={
@@ -103,12 +127,39 @@ export default function AccountPanel({
           )
         }
       />
+      {resolution && userResolution && (
+        <>
+          <Row
+            label="Result"
+            value={
+              userWon === null ? (
+                <span style={{ color: C.textMute }}>No settled position</span>
+              ) : (
+                <span style={{ color: userWon ? C.yes : C.no, fontWeight: 800 }}>
+                  {userWon ? 'Won' : 'Lost'} on {resolution.outcome}
+                </span>
+              )
+            }
+          />
+          <Row label="Final payout" value={formatUsdCents(userResolution.payoutCents)} />
+          <Row
+            label="Final PnL"
+            value={
+              <span style={{ color: userResolution.pnlCents >= 0 ? C.yes : C.no, fontWeight: 800 }}>
+                {userResolution.pnlCents >= 0 ? '+' : ''}
+                {formatUsdCents(userResolution.pnlCents as UsdCents)}
+              </span>
+            }
+          />
+        </>
+      )}
       <OpenOrders
         orders={openOrders}
         cancellingOrderId={cancellingOrderId}
         cancelError={cancelError}
         onCancel={(order) => void cancelOrder(order)}
       />
+      <RecentFills fills={recentFills} />
     </Panel>
   );
 }
@@ -136,6 +187,7 @@ function OpenOrders({
         <div style={{ display: 'flex', flexDirection: 'column', gap: S.xs }}>
           {orders.map((order) => {
             const cancelling = cancellingOrderId === order.orderId;
+            const filled = (order.size as number) - (order.remaining as number);
             return (
               <div key={order.orderId} style={orderRowStyle}>
                 <div style={{ minWidth: 0 }}>
@@ -143,7 +195,7 @@ function OpenOrders({
                     {order.display.action} {order.display.side}
                   </div>
                   <div style={{ color: C.textMute, fontSize: 11 }}>
-                    {formatPriceCents(order.display.oddsPriceCents)} · {order.remaining as number} remaining
+                    {formatPriceCents(order.display.oddsPriceCents)} · {filled}/{order.size as number} filled · {order.remaining as number} remaining · {order.status}
                   </div>
                 </div>
                 <button
@@ -168,6 +220,32 @@ function OpenOrders({
   );
 }
 
+function RecentFills({ fills }: { fills: Fill[] }) {
+  return (
+    <div style={openOrdersStyle}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: S.xs }}>
+        <span style={{ color: C.textDim, fontSize: 12, fontWeight: 700 }}>Your fills</span>
+        <span style={{ color: C.textMute, fontSize: 11 }}>{fills.length}</span>
+      </div>
+      {fills.length === 0 ? (
+        <div style={{ color: C.textMute, fontSize: 12 }}>No fills yet</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: S.xs }}>
+          {fills.slice(0, 6).map((fill) => (
+            <div key={`${fill.tradeId}:${fill.orderId}:${fill.userId}`} style={fillRowStyle}>
+              <span style={{ color: C.textMute }}>{formatAge(Date.now() - fill.ts)}</span>
+              <span style={{ color: fill.yesAction === 'BUY' ? C.yes : C.no, fontWeight: 800 }}>
+                {fill.yesAction === 'BUY' ? 'Bought YES' : 'Sold YES'}
+              </span>
+              <span style={{ color: C.text }}>{fill.size as number} @ {formatPriceCents(fill.yesPriceCents)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Row({
   label,
   value,
@@ -183,6 +261,12 @@ function Row({
       <span style={{ color: dim ? C.textDim : C.text }}>{value}</span>
     </div>
   );
+}
+
+function formatPosition(net: number): string {
+  if (net > 0) return `Long YES: ${net} shares`;
+  if (net < 0) return `Long NO: ${Math.abs(net)} shares`;
+  return 'No position';
 }
 
 const noteStyle: CSSProperties = {
@@ -208,6 +292,18 @@ const orderRowStyle: CSSProperties = {
   border: `1px solid ${C.border}`,
   borderRadius: 6,
   padding: S.sm,
+};
+
+const fillRowStyle: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: '1.2fr 1.4fr 1fr',
+  gap: S.xs,
+  alignItems: 'center',
+  background: C.panelAlt,
+  border: `1px solid ${C.border}`,
+  borderRadius: 6,
+  padding: S.sm,
+  fontSize: 11,
 };
 
 const cancelButtonStyle: CSSProperties = {

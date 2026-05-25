@@ -77,28 +77,44 @@ export default function OracleReferencePanel({ priceHistory, thresholdCents, cur
     currentPriceCents != null
       ? Math.round(((currentPriceCents - thresholdCents) / thresholdCents) * 10000)
       : null;
+  const deltaCents = currentPriceCents != null ? currentPriceCents - thresholdCents : null;
 
   return (
     <div style={{ ...panel, padding: 0, overflow: 'hidden' }}>
       <div style={headerStyle}>
-        <div>
-          <div style={labelStyle}>BTC / USD ORACLE INPUT</div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: S.xs, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 18, fontWeight: 800, color: C.text }}>
-              {currentPriceCents != null ? formatUsdCents(currentPriceCents) : '--'}
-            </span>
-            {deltaVsStrikeBps != null && (
-              <span style={{ fontSize: 11, color: deltaVsStrikeBps >= 0 ? C.yes : C.no }}>
-                {deltaVsStrikeBps >= 0 ? '+' : ''}
-                {deltaVsStrikeBps} bps
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: S.md, flexWrap: 'wrap' }}>
+          <div>
+            <div style={labelStyle}>BTC / USD ORACLE INPUT</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: S.xs, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 18, fontWeight: 800, color: C.text }}>
+                {currentPriceCents != null ? formatUsdCents(currentPriceCents) : '--'}
               </span>
-            )}
+              {deltaVsStrikeBps != null && deltaCents != null && (
+                <span style={{ fontSize: 11, color: deltaVsStrikeBps >= 0 ? C.yes : C.no }}>
+                  {deltaCents >= 0 ? '+' : ''}
+                  {formatUsdCents(deltaCents as UsdCents)} / {formatPct(deltaVsStrikeBps)}
+                </span>
+              )}
+            </div>
           </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={labelStyle}>STRIKE</div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: C.text }}>{formatUsdCents(thresholdCents)}</div>
+          </div>
+        </div>
+        <div style={methodRowStyle}>
+          <span>Oracle method: VENUE_WEIGHTED_TWAP_V1</span>
+          <span>Resolution uses oracle price, not last traded share price.</span>
         </div>
       </div>
       <div ref={containerRef} />
     </div>
   );
+}
+
+function formatPct(bps: number): string {
+  const pct = bps / 100;
+  return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
 }
 
 const headerStyle: CSSProperties = {
@@ -113,4 +129,15 @@ const labelStyle: CSSProperties = {
   fontWeight: 800,
   textTransform: 'uppercase',
   marginBottom: S.xs,
+};
+
+const methodRowStyle: CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  gap: S.sm,
+  flexWrap: 'wrap',
+  color: C.textMute,
+  fontSize: 10,
+  lineHeight: 1.35,
+  marginTop: S.sm,
 };

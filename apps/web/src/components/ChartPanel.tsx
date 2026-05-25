@@ -22,6 +22,10 @@ export default function ChartPanel({ sharePriceHistory, currentPoint, bestBid, b
   const seriesRef = useRef<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fiftyLineRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const bidLineRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const askLineRef = useRef<any>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -44,6 +48,12 @@ export default function ChartPanel({ sharePriceHistory, currentPoint, bestBid, b
       color: C.yes,
       lineWidth: 2,
       priceFormat: { type: 'price', precision: 0, minMove: 1 },
+      autoscaleInfoProvider: () => ({
+        priceRange: {
+          minValue: 0,
+          maxValue: 100,
+        },
+      }),
     });
     seriesRef.current = series;
     fiftyLineRef.current = series.createPriceLine({
@@ -53,6 +63,22 @@ export default function ChartPanel({ sharePriceHistory, currentPoint, bestBid, b
       lineStyle: LineStyle.Dashed,
       axisLabelVisible: true,
       title: '50%',
+    });
+    bidLineRef.current = series.createPriceLine({
+      price: 0,
+      color: C.yes,
+      lineWidth: 1,
+      lineStyle: LineStyle.Dotted,
+      axisLabelVisible: true,
+      title: 'BID',
+    });
+    askLineRef.current = series.createPriceLine({
+      price: 100,
+      color: C.no,
+      lineWidth: 1,
+      lineStyle: LineStyle.Dotted,
+      axisLabelVisible: true,
+      title: 'ASK',
     });
 
     const ro = new ResizeObserver(() => {
@@ -66,6 +92,8 @@ export default function ChartPanel({ sharePriceHistory, currentPoint, bestBid, b
       chartRef.current = null;
       seriesRef.current = null;
       fiftyLineRef.current = null;
+      bidLineRef.current = null;
+      askLineRef.current = null;
     };
   }, []);
 
@@ -89,21 +117,38 @@ export default function ChartPanel({ sharePriceHistory, currentPoint, bestBid, b
     series.setData(data);
   }, [sharePriceHistory]);
 
+  useEffect(() => {
+    bidLineRef.current?.applyOptions({
+      price: bestBid ?? 0,
+      axisLabelVisible: bestBid != null,
+      title: bestBid != null ? 'BID' : '',
+    });
+    askLineRef.current?.applyOptions({
+      price: bestAsk ?? 100,
+      axisLabelVisible: bestAsk != null,
+      title: bestAsk != null ? 'ASK' : '',
+    });
+  }, [bestBid, bestAsk]);
+
   const yes = currentPoint?.yesPriceCents ?? null;
   const no = currentPoint?.noPriceCents ?? null;
   const source = currentPoint?.source ?? 'mark';
+  const lastTrade = [...sharePriceHistory].reverse().find((point) => point.source === 'trade') ?? null;
 
   return (
     <div style={{ ...panel, padding: 0, overflow: 'hidden' }}>
       <div style={headerStyle}>
         <div style={{ minWidth: 0 }}>
-          <div style={labelStyle}>YES SHARE MARKET PRICE</div>
+          <div style={labelStyle}>YES PRICE / IMPLIED PROBABILITY</div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: S.sm, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 32, lineHeight: 1, fontWeight: 900, color: C.yes }}>
               {yes != null ? formatPriceCents(yes) : '--'}
             </span>
             <span style={{ fontSize: 13, color: C.textDim }}>
               NO {no != null ? formatPriceCents(no) : '--'}
+            </span>
+            <span style={{ fontSize: 13, color: C.textDim }}>
+              Last trade {lastTrade ? formatPriceCents(lastTrade.yesPriceCents) : '--'}
             </span>
             <span style={{ fontSize: 11, color: C.textMute, textTransform: 'uppercase' }}>{source}</span>
           </div>

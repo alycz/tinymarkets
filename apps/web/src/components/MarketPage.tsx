@@ -10,6 +10,8 @@ import type {
   Balance,
   Position,
   CanonicalOrder,
+  Fill,
+  OrderIntent,
   PriceCents,
   SharePricePoint,
   TimestampMs,
@@ -42,8 +44,10 @@ interface Props {
   balance: Balance | null;
   position: Position | null;
   openOrders: CanonicalOrder[];
+  recentFills: Fill[];
   userResolution: UserResolutionEvent | null;
   refreshUserSnapshot: () => Promise<void>;
+  recordRecentFills: (fills: Fill[]) => void;
   oraclePriceHistory: PricePoint[];
   sharePriceHistory: SharePricePoint[];
   userId: string;
@@ -76,8 +80,10 @@ export default function MarketPage({
   balance,
   position,
   openOrders,
+  recentFills,
   userResolution,
   refreshUserSnapshot,
+  recordRecentFills,
   oraclePriceHistory,
   sharePriceHistory,
   userId,
@@ -85,6 +91,11 @@ export default function MarketPage({
   onStartNew,
 }: Props) {
   const narrow = useNarrow();
+  const [ticketSelection, setTicketSelection] = useState<{
+    intent: OrderIntent;
+    price: PriceCents;
+    nonce: number;
+  } | null>(null);
 
   const bestBid = orderBookSnapshot?.bids[0];
   const bestAsk = orderBookSnapshot?.asks[0];
@@ -132,7 +143,9 @@ export default function MarketPage({
       userId={userId}
       marketStatus={marketStatus}
       apiUrl={apiUrl}
+      selectedOrder={ticketSelection}
       onOrderAccepted={refreshUserSnapshot}
+      onFillsAccepted={recordRecentFills}
     />
   );
 
@@ -142,13 +155,27 @@ export default function MarketPage({
       position={position}
       contractMidCents={contractMid}
       openOrders={openOrders}
+      recentFills={recentFills}
+      resolution={resolution}
+      userResolution={userResolution}
       userId={userId}
       apiUrl={apiUrl}
       onRefreshUser={refreshUserSnapshot}
     />
   );
 
-  const book = <OrderBookPanel snapshot={orderBookSnapshot} />;
+  const book = (
+    <OrderBookPanel
+      snapshot={orderBookSnapshot}
+      onSelectLevel={(level, side) => {
+        setTicketSelection({
+          intent: side === 'ask' ? 'BUY_YES' : 'SELL_YES',
+          price: level.yesPriceCents,
+          nonce: Date.now(),
+        });
+      }}
+    />
+  );
   const feed = <TradesFeed trades={trades} />;
   const oracle = (
     <OraclePanel
@@ -173,6 +200,12 @@ export default function MarketPage({
   return (
     <div style={outerStyle}>
       {header}
+      {marketStatus === 'resolving' && (
+        <div style={resolvingStyle}>
+          <strong>Resolving from oracle TWAP...</strong>
+          <span>Trading is disabled while the final reference price is calculated.</span>
+        </div>
+      )}
       {resolution && (
         <ResolutionBanner
           resolution={resolution}
@@ -225,6 +258,11 @@ function ResolutionBanner({
   const payoutCents = userResolution?.payoutCents ?? (0 as UsdCents);
   const netAtResolution = userResolution?.netAtResolution ?? 0;
   const outcomeColor = resolution.outcome === 'YES' ? C.yes : C.no;
+  const userWon =
+    userResolution && netAtResolution !== 0
+      ? (resolution.outcome === 'YES' && netAtResolution > 0) ||
+        (resolution.outcome === 'NO' && netAtResolution < 0)
+      : null;
 
   return (
     <div style={{ ...resolutionStyle, borderColor: outcomeColor + '66' }}>
@@ -236,7 +274,14 @@ function ResolutionBanner({
       </div>
       <ResolutionStat label="Weighted TWAP reference price" value={formatUsdCents(resolution.resolutionPriceCents)} />
       <ResolutionStat label="Strike" value={formatUsdCents(thresholdCents)} />
+      <ResolutionStat label="Tie rule" value={resolution.tieRule} />
       <ResolutionStat label="Your position at resolution" value={formatResolvedPosition(netAtResolution)} />
+      <ResolutionStat
+        label="Your result"
+        value={userWon === null ? 'No settled position' : userWon ? 'Won' : 'Lost'}
+        color={userWon === null ? C.textMute : userWon ? C.yes : C.no}
+        emphasize
+      />
       <ResolutionStat label="Payout" value={formatUsdCents(payoutCents)} emphasize />
       <ResolutionStat
         label="Final PnL"
@@ -299,6 +344,19 @@ const resolutionStyle: CSSProperties = {
   border: `1px solid ${C.border}`,
   borderRadius: 8,
   padding: S.lg,
+};
+
+const resolvingStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: S.sm,
+  flexWrap: 'wrap',
+  background: C.panel,
+  border: `1px solid ${C.warn}66`,
+  borderRadius: 8,
+  padding: S.md,
+  color: C.text,
+  fontSize: 13,
 };
 
 const resolutionLabel: CSSProperties = {

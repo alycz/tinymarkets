@@ -38,7 +38,7 @@ function Header() {
   return (
     <div style={{ ...row, color: C.textMute, fontSize: 10, letterSpacing: '0.08em', marginBottom: S.xs }}>
       <span>AGE</span>
-      <span>SIDE</span>
+      <span>ACTION</span>
       <span>PRICE</span>
       <span style={{ textAlign: 'right' }}>SIZE</span>
       <span>KIND</span>
@@ -49,13 +49,17 @@ function Header() {
 function TradeRow({ trade }: { trade: Trade }) {
   const age = formatAge(Date.now() - trade.ts);
   const sideColor = trade.takerSide === 'YES' ? C.yes : C.no;
+  const displayPrice =
+    trade.takerSide === 'YES'
+      ? trade.yesPriceCents
+      : ((100 - trade.yesPriceCents) as typeof trade.yesPriceCents);
 
   return (
     <div style={{ ...row, fontSize: 12, marginBottom: 3 }}>
       <span style={{ color: C.textMute }}>{age}</span>
-      <span style={{ color: sideColor, fontWeight: 600 }}>{trade.takerSide}</span>
+      <span style={{ color: sideColor, fontWeight: 600 }}>Bought {trade.takerSide}</span>
       <span style={{ color: C.text }}>
-        {formatPriceCents(trade.yesPriceCents)}
+        {formatPriceCents(displayPrice)}
       </span>
       <span style={{ color: C.text, textAlign: 'right' }}>{trade.size as number}</span>
       <span style={{ color: C.textMute }}>{KIND_LABEL[trade.kind]}</span>
