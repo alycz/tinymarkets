@@ -15,6 +15,7 @@ import {
   type PlaceOrderRequest,
   type Position,
   type PriceCents,
+  type SharePriceMetrics,
   type SharePricePoint,
   type SignedShares,
   type Trade,
@@ -298,8 +299,10 @@ export class MarketSession {
         yesPriceCents: trade.yesPriceCents,
         noPriceCents: noPriceCents(trade.yesPriceCents),
         source: 'trade',
+        tradeId: trade.tradeId,
+        volume: trade.size,
         ...this.currentBestPrices(),
-      });
+      }, { force: true });
 
       for (const fill of fills) {
         this.broadcaster?.userFill(fill.userId, fill);
@@ -412,9 +415,53 @@ export class MarketSession {
     }
   }
 
-  private recordAndBroadcastSharePrice(point: SharePricePoint): void {
+  private recordAndBroadcastSharePrice(point: SharePricePoint, opts?: { force?: boolean }): void {
+    if (!this.validateSharePricePoint(point)) return;
+    if (!opts?.force && !this.shouldAppendSharePricePoint(point)) return;
     this.pushSharePrice(point);
     this.broadcaster?.sharePrice(point);
+  }
+
+  private validateSharePricePoint(point: SharePricePoint): boolean {
+    const validSource = point.source === 'trade' || point.source === 'mid' || point.source === 'mark';
+    const yes = point.yesPriceCents as number;
+    const no = point.noPriceCents as number;
+    const bestBid = point.bestBid as number | undefined;
+    const bestAsk = point.bestAsk as number | undefined;
+    const validPrice = (value: number | undefined) =>
+      value === undefined || (Number.isInteger(value) && value >= 1 && value <= 99);
+
+    if (
+      !validSource ||
+      !Number.isInteger(yes) ||
+      yes < 1 ||
+      yes > 99 ||
+      !Number.isInteger(no) ||
+      no !== 100 - yes ||
+      !validPrice(bestBid) ||
+      !validPrice(bestAsk)
+    ) {
+      console.warn('Rejected invalid YES share price point; possible BTC/oracle leak', point);
+      return false;
+    }
+
+    return true;
+  }
+
+  private shouldAppendSharePricePoint(point: SharePricePoint): boolean {
+    const prev = this.sharePriceSeries.at(-1);
+    if (!prev) return true;
+    if (point.source === 'trade') return true;
+
+    const changed =
+      prev.source !== point.source ||
+      prev.yesPriceCents !== point.yesPriceCents ||
+      prev.noPriceCents !== point.noPriceCents ||
+      prev.bestBid !== point.bestBid ||
+      prev.bestAsk !== point.bestAsk;
+
+    if (changed) return true;
+    return (point.ts as number) - (prev.ts as number) >= 1000;
   }
 
   private currentBestPrices(): { bestBid?: PriceCents; bestAsk?: PriceCents } {

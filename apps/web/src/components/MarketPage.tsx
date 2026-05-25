@@ -92,6 +92,10 @@ export default function MarketPage({
     bestBid != null && bestAsk != null
       ? (Math.round((bestBid.yesPriceCents + bestAsk.yesPriceCents) / 2) as PriceCents)
       : null;
+  const spread: PriceCents | null =
+    bestBid != null && bestAsk != null
+      ? (Math.max(1, bestAsk.yesPriceCents - bestBid.yesPriceCents) as PriceCents)
+      : null;
 
   const header = (
     <MarketHeader
@@ -110,6 +114,7 @@ export default function MarketPage({
       currentPoint={sharePriceHistory.at(-1) ?? null}
       bestBid={bestBid?.yesPriceCents ?? null}
       bestAsk={bestAsk?.yesPriceCents ?? null}
+      spread={spread}
     />
   );
 

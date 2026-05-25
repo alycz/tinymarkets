@@ -11,9 +11,10 @@ interface Props {
   currentPoint: SharePricePoint | null;
   bestBid: PriceCents | null;
   bestAsk: PriceCents | null;
+  spread: PriceCents | null;
 }
 
-export default function ChartPanel({ sharePriceHistory, currentPoint, bestBid, bestAsk }: Props) {
+export default function ChartPanel({ sharePriceHistory, currentPoint, bestBid, bestAsk, spread }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const chartRef = useRef<any>(null);
@@ -71,13 +72,20 @@ export default function ChartPanel({ sharePriceHistory, currentPoint, bestBid, b
   useEffect(() => {
     const series = seriesRef.current;
     if (!series) return;
-    const seen = new Map<number, number>();
+    const seen = new Map<number, { value: number; priority: number }>();
     for (const p of sharePriceHistory) {
-      seen.set(Math.floor(p.ts / 1000), p.yesPriceCents as number);
+      const value = p.yesPriceCents as number;
+      if (!Number.isFinite(value) || value < 1 || value > 99) continue;
+      const time = Math.floor(p.ts / 1000);
+      const priority = sourcePriority(p.source);
+      const existing = seen.get(time);
+      if (!existing || priority >= existing.priority) {
+        seen.set(time, { value, priority });
+      }
     }
     const data = Array.from(seen.entries())
       .sort((a, b) => a[0] - b[0])
-      .map(([time, value]) => ({ time: time as UTCTimestamp, value }));
+      .map(([time, point]) => ({ time: time as UTCTimestamp, value: point.value }));
     series.setData(data);
   }, [sharePriceHistory]);
 
@@ -103,11 +111,18 @@ export default function ChartPanel({ sharePriceHistory, currentPoint, bestBid, b
         <div style={quoteBoxStyle}>
           <Quote label="Bid" value={bestBid} color={C.yes} />
           <Quote label="Ask" value={bestAsk} color={C.no} />
+          <Quote label="Spread" value={spread} color={C.textDim} />
         </div>
       </div>
       <div ref={containerRef} />
     </div>
   );
+}
+
+function sourcePriority(source: SharePricePoint['source']): number {
+  if (source === 'trade') return 3;
+  if (source === 'mid') return 2;
+  return 1;
 }
 
 function Quote({ label, value, color }: { label: string; value: PriceCents | null; color: string }) {

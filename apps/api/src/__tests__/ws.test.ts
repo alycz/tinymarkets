@@ -106,8 +106,10 @@ describe('WebSocket protocol hardening', () => {
   it('replays open orders when a user channel subscribes', () => {
     const session = new MarketSession();
     const manager = new WsManager({ heartbeatMs: 60_000 });
+    const broadcaster = new Broadcaster(manager);
     try {
       manager.setSession(session);
+      session.setBroadcaster(broadcaster);
       const market = session.startDemo();
       session.placeOrder({
         userId: 'userA',
@@ -176,8 +178,10 @@ describe('WebSocket protocol hardening', () => {
   it('replays YES share-price points when a share channel subscribes', () => {
     const session = new MarketSession();
     const manager = new WsManager({ heartbeatMs: 60_000 });
+    const broadcaster = new Broadcaster(manager);
     try {
       manager.setSession(session);
+      session.setBroadcaster(broadcaster);
       const market = session.startDemo();
       session.placeOrder({
         userId: 'userA',
