@@ -33,8 +33,8 @@ export function loadConfig(): TakersConfig {
   const maxIntervalMs = Math.max(minIntervalMs, intEnv('MAX_INTERVAL_MS', 8_000));
 
   return {
-    apiBaseUrl: readUrlEnv('API_BASE_URL', ['http:', 'https:']),
-    wsUrl: readUrlEnv('WS_URL', ['ws:', 'wss:']),
+    apiBaseUrl: readUrlEnv('API_BASE_URL', ['http:', 'https:'], 'http://localhost:3001'),
+    wsUrl: readUrlEnv('WS_URL', ['ws:', 'wss:'], 'ws://localhost:3001/ws'),
     numTakers: clamp(intEnv('NUM_TAKERS', 30), 1, 100),
     rateLimitTps: Math.max(0.1, floatEnv('RATE_LIMIT_TPS', 4)),
     minIntervalMs,
@@ -45,11 +45,8 @@ export function loadConfig(): TakersConfig {
   };
 }
 
-function readUrlEnv(name: 'API_BASE_URL' | 'WS_URL', protocols: string[]): string {
-  const raw = process.env[name];
-  if (!raw) {
-    throw new Error(`${name} is required`);
-  }
+function readUrlEnv(name: 'API_BASE_URL' | 'WS_URL', protocols: string[], fallback: string): string {
+  const raw = process.env[name] ?? fallback;
 
   const normalized = raw.replace(/\/+$/, '');
   let url: URL;

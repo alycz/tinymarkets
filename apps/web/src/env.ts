@@ -1,12 +1,9 @@
-export const API_URL = readUrlEnv('VITE_API_URL', ['http:', 'https:']);
-export const WS_URL = readUrlEnv('VITE_WS_URL', ['ws:', 'wss:']);
+export const API_URL = readUrlEnv('VITE_API_URL', ['http:', 'https:'], 'http://localhost:3001');
+export const WS_URL = readUrlEnv('VITE_WS_URL', ['ws:', 'wss:'], 'ws://localhost:3001/ws');
 export const DEMO_USER_ID = (import.meta.env['VITE_DEMO_USER_ID'] as string | undefined) ?? 'demo';
 
-function readUrlEnv(name: 'VITE_API_URL' | 'VITE_WS_URL', protocols: string[]): string {
-  const raw = import.meta.env[name] as string | undefined;
-  if (!raw) {
-    throw new Error(`${name} is required`);
-  }
+function readUrlEnv(name: 'VITE_API_URL' | 'VITE_WS_URL', protocols: string[], fallback: string): string {
+  const raw = (import.meta.env[name] as string | undefined) ?? fallback;
 
   const normalized = raw.replace(/\/+$/, '');
   let url: URL;

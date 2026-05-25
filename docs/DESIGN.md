@@ -17,12 +17,13 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev` starts the API and web app. Liquidity is added by running the market maker and takers in separate terminals:
+`pnpm dev` starts the API and web app with local defaults; no env exports are required. Liquidity is added by running the market maker and takers in another terminal:
 
 ```bash
-pnpm --filter @jet/bots dev
-pnpm --filter @jet/bots dev:takers
+pnpm dev:bots
 ```
+
+`pnpm demo` starts API, web, market maker, and takers together. The bots can start before the market is open because they wait for an open market.
 
 What is real:
 
@@ -39,6 +40,8 @@ What is simulated:
 - Users are unauthenticated string ids.
 - Bots are local processes.
 - There is no persistence, wallet, signature flow, custody, or on-chain settlement.
+
+`DEMO_MODE=live` and `DEMO_MODE=hybrid` are accepted for future compatibility, but currently retain deterministic simulated venues so the demo remains reliable. Real live exchange adapters are production/future work.
 
 The manipulation demo is also simulated. The oracle controls can arm either a near-expiry single-venue spike or a subtler single-venue dislocation. The point is to show that this implementation resists those one-venue stresses through median aggregation, partitioning, and outlier exclusion. It is not a claim that manipulation is impossible.
 
@@ -111,7 +114,7 @@ Sell NO  @ p -> bid YES @ 100 - p
 
 Matching produces raw `Match` records. `@jet/market-core` then classifies those into public trades and private fills based on the pre-trade signed positions of the two parties. Public trades are appended to a 100-item in-memory ring buffer and broadcast on `trades:<marketId>`.
 
-The API validates the cheap boundary conditions that matter for the demo: integer prices in 1..99, positive integer sizes, supported side/action/type/TIF, matching market id, open market status, known order on cancel, and cancel ownership. It does not implement authentication, signatures, fee accounting, persistence, risk limits, or conservative order reservation.
+The API validates the cheap boundary conditions that matter for the demo: integer prices in 1..99, positive integer sizes, supported side/action/type/TIF, matching market id, open market status, known order on cancel, and cancel ownership. It tracks resting-order reserves separately from settlement collateral and releases them on cancel, fill, and resolution cleanup. It does not implement authentication, signatures, fee accounting, persistence, or production risk limits.
 
 ## 4. Unified Market Structure
 
@@ -151,7 +154,7 @@ The invariant is:
 total locked collateral == openInterest * $1
 ```
 
-The demo exposes this as an "OI collateral share" per user. That display is a simplified allocation used to preserve the global invariant, not exact price-basis collateral for each trader. A production ledger should track the actual collateral basis paid by each side at each fill price.
+The demo exposes this as an "OI collateral share" per user. That display is a simplified allocation used to preserve the global invariant, not exact price-basis collateral for each trader. Resting-order reserves are shown separately as reserved funds. A production ledger should track the actual collateral basis paid by each side at each fill price.
 
 This structure is better than dual YES/NO token books for the demo because it avoids fragmented liquidity and duplicated matching logic. Users can still trade YES and NO in the UI, but the engine only has one price ladder and one net position per user per market. Transfers and closes become accounting classifications rather than separate token flows across two books.
 
@@ -172,7 +175,9 @@ User channel:
 
 On subscription, the server sends catch-up state where available. For market status it sends current status and, if already resolved, the resolution. For the book it sends a fresh snapshot. For trades it replays recent trades from the ring buffer. For oracle it sends the latest indicative snapshot. For user state it sends current balance and position.
 
-Book snapshots and deltas carry a monotonic `seq`. The web client applies deltas only when the next sequence is exactly `current + 1`; on a gap it unsubscribes and re-subscribes to force a fresh snapshot. On WebSocket reconnect, hooks re-subscribe and receive catch-up snapshots again.
+Book snapshots and deltas carry a monotonic `seq`. Mutating order-book operations advance the sequence; snapshots report the current sequence and do not consume one. The web client applies deltas only when the next sequence is exactly `current + 1`; on a gap it unsubscribes and re-subscribes to force a fresh snapshot. On WebSocket reconnect, hooks re-subscribe and receive catch-up snapshots again.
+
+Incoming WebSocket messages receive lightweight runtime validation. Invalid JSON, non-object messages, unknown message types, unsupported channels, and oversized subscription batches receive typed error events instead of mutating subscriptions. The server also uses heartbeat checks to clean up dead sockets.
 
 The server clock is authoritative. `market:status` includes `msRemaining`, `expiryMs`, and `serverTs`; the client renders those values instead of running its own market lifecycle.
 
@@ -356,9 +361,20 @@ The frontend is a single dense market page rather than a landing page. It priori
 
 The chart's live price is the indicative oracle price, not the settlement price. During the final 30 seconds, the oracle snapshot can include `formingResolution`, and the panel shows the forming partition median separately. This split is intentional: users need a responsive displayed price for trading, but settlement uses the final-window benchmark.
 
-The main tradeoff is simplicity. The UI shows the real mechanics that exist, but avoids features the backend does not support: order history, deposits, auth, wallet connection, persistence, fees, and risk limits.
+The main tradeoff is simplicity. The UI shows the real mechanics that exist, but avoids features the backend does not support: deposits, auth, wallet connection, persistence, fees, and production risk limits.
 
-## 9. Future Production Considerations
+## 9. Known Simplifications
+
+- In-memory only; no database or durable replay store.
+- Fake balances and unauthenticated string user ids.
+- No wallet, signature, custody, or on-chain settlement flow.
+- Simulated venue feeds are implemented; live exchange adapters are future work.
+- OI collateral share is a simplified display, not exact per-fill collateral basis.
+- No fee, liquidation, margin, or production risk system.
+- Bots are intentionally approximate local liquidity.
+- `DISLOCATED` still resolves by the strict demo rule. Production should define pause, extension, refund, or dispute behavior.
+
+## 10. Future Production Considerations
 
 The current app is an in-memory local demo. A production version would need:
 

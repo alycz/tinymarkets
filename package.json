@@ -9,9 +9,12 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
     "build": "pnpm -r --if-present build",
-    "dev": "pnpm -r --parallel --filter @jet/api --filter @jet/web dev"
+    "dev": "concurrently -k -n api,web -c cyan,green \"pnpm --filter @jet/api dev\" \"pnpm --filter @jet/web dev\"",
+    "dev:bots": "concurrently -k -n mm,takers -c magenta,yellow \"pnpm --filter @jet/bots dev\" \"pnpm --filter @jet/bots dev:takers\"",
+    "demo": "concurrently -k -n api,web,mm,takers -c cyan,green,magenta,yellow \"pnpm --filter @jet/api dev\" \"pnpm --filter @jet/web dev\" \"pnpm --filter @jet/bots dev\" \"pnpm --filter @jet/bots dev:takers\""
   },
   "devDependencies": {
+    "concurrently": "^9.1.2",
     "typescript": "^5.6.0",
     "vitest": "^2.0.0"
   }
