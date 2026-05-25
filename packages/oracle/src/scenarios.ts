@@ -7,6 +7,7 @@ import type { VenueAdapter } from './venue-adapter.js';
 export type ScenarioName =
   | 'HONEST'
   | 'NEAR_EXPIRY_SPIKE'
+  | 'SUBTLE_DISLOCATION'
   | 'STALE_VENUE'
   | 'CROSSED_BOOK'
   | 'WIDE_SPREAD';
@@ -62,6 +63,33 @@ export function buildScenario(
       });
       return {
         adapters: [...adapters.slice(0, 4), spikedBinance],
+        seed,
+        marketStartMs,
+      };
+    }
+
+    case 'SUBTLE_DISLOCATION': {
+      const dislocationStart = windowStart + 2 * ORACLE.partitionSeconds * 1000;
+      const adapters = buildHonestVenues(seed, basePath, marketStartMs);
+      const dislocatedBinance = new SimulatedVenue({
+        venueId: 'binance',
+        quote: 'USDT',
+        seed: seed ^ 5,
+        noiseBps: 4,
+        spreadBps: 3,
+        latencyMs: 150,
+        sampleIntervalMs: SAMPLE_INTERVAL_MS,
+        basePath,
+        marketStartMs,
+        basisAdjustmentBps: 5,
+        spike: {
+          startMs: dislocationStart,
+          durationMs: 4 * ORACLE.partitionSeconds * 1000,
+          amplitudeBps: 22,
+        },
+      });
+      return {
+        adapters: [...adapters.slice(0, 4), dislocatedBinance],
         seed,
         marketStartMs,
       };

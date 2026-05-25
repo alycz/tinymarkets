@@ -1,4 +1,3 @@
-import { ORACLE } from '@jet/config';
 import {
   type IndicativeSnapshot,
   type MarketConfig,
@@ -18,6 +17,7 @@ import {
   roundMillicentsToCentsHalfUp,
 } from './math.js';
 import { buildFormingResolution } from './forming-resolution.js';
+import type { OracleConfig } from './oracle-config.js';
 
 export interface BuildIndicativeParams {
   marketId: MarketId;
@@ -25,7 +25,7 @@ export interface BuildIndicativeParams {
   expiryTs?: TimestampMs;
   adapters: readonly VenueAdapter[];
   now: TimestampMs;
-  oracleCfg: typeof ORACLE;
+  oracleCfg: OracleConfig;
 }
 
 /** Build the live indicative price snapshot — equal-weight median of healthy venue mids. */

@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
-import type { MarketId } from '@jet/shared';
+import type { DemoScenarioRequest, MarketId, OracleDemoScenario } from '@jet/shared';
 import type { MarketSession } from '../session.js';
+
+const DEMO_SCENARIOS = new Set<OracleDemoScenario>(['NEAR_EXPIRY_SPIKE', 'SUBTLE_DISLOCATION']);
 
 export function createMarketsRoutes(session: MarketSession) {
   return async function (fastify: FastifyInstance) {
@@ -23,7 +25,26 @@ export function createMarketsRoutes(session: MarketSession) {
     fastify.post<{ Params: { marketId: string } }>(
       '/markets/:marketId/oracle/demo-spike',
       async (req, reply) => {
-        const result = session.armDemoSpike(req.params.marketId as MarketId);
+        const result = session.armDemoScenario(req.params.marketId as MarketId, 'NEAR_EXPIRY_SPIKE');
+        if (!result.ok) {
+          const status = result.error.code === 'UNKNOWN_MARKET' ? 404 : 409;
+          return reply.status(status).send(result);
+        }
+        return reply.send(result);
+      },
+    );
+
+    fastify.post<{ Params: { marketId: string }; Body: DemoScenarioRequest }>(
+      '/markets/:marketId/oracle/demo',
+      async (req, reply) => {
+        const scenario = req.body?.scenario;
+        if (!isDemoScenario(scenario)) {
+          return reply.status(400).send({
+            ok: false,
+            error: { code: 'VALIDATION', message: 'Unsupported oracle demo scenario' },
+          });
+        }
+        const result = session.armDemoScenario(req.params.marketId as MarketId, scenario);
         if (!result.ok) {
           const status = result.error.code === 'UNKNOWN_MARKET' ? 404 : 409;
           return reply.status(status).send(result);
@@ -86,4 +107,8 @@ export function createMarketsRoutes(session: MarketSession) {
       },
     );
   };
+}
+
+function isDemoScenario(value: unknown): value is OracleDemoScenario {
+  return typeof value === 'string' && DEMO_SCENARIOS.has(value as OracleDemoScenario);
 }

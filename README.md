@@ -82,13 +82,16 @@ RATE_LIMIT_TPS=4
 
 ## Manipulation Demo
 
-The oracle panel includes an `Arm Spike Demo` button. It calls:
+The oracle panel includes controls for a spike scenario and a subtler dislocation scenario. They call:
 
 ```bash
-POST /markets/:marketId/oracle/demo-spike
+POST /markets/:marketId/oracle/demo
+{ "scenario": "NEAR_EXPIRY_SPIKE" | "SUBTLE_DISLOCATION" }
 ```
 
-That switches the deterministic simulated venue set to a near-expiry single-venue spike scenario. At resolution, the RAMP_V1 panel shows the final partitions, sources used, sources excluded, confidence, dispersion state, and input hash. The demo is meant to show resistance to a single simulated venue spike, not impossibility of manipulation.
+The legacy `POST /markets/:marketId/oracle/demo-spike` route remains available as a wrapper for `NEAR_EXPIRY_SPIKE`.
+
+That switches the deterministic simulated venue set to the selected one-venue stress scenario. At resolution, the RAMP_V1 panel shows the final partitions, quality flags, sources used, source usage, sources excluded, confidence, dispersion state, and input hash. The demo is meant to show resistance to single simulated venue stresses, not impossibility of manipulation.
 
 ## API And Web Env
 

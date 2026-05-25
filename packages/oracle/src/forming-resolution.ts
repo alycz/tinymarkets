@@ -1,4 +1,3 @@
-import { ORACLE } from '@jet/config';
 import {
   type FormingResolution,
   type MarketConfig,
@@ -13,13 +12,14 @@ import type { PartitionVenueData } from './partition.js';
 import { midTwapMillicents } from './twap.js';
 import { aggregatePartition } from './partition.js';
 import { computeMedian, roundMillicentsToCentsHalfUp, type UsdMillicents } from './math.js';
+import type { OracleConfig } from './oracle-config.js';
 
 export interface BuildFormingResolutionParams {
   config: MarketConfig;
   expiryTs: TimestampMs;
   adapters: readonly VenueAdapter[];
   now: TimestampMs;
-  oracleCfg: typeof ORACLE;
+  oracleCfg: OracleConfig;
 }
 
 /**

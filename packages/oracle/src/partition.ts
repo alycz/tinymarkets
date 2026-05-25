@@ -8,7 +8,6 @@ import {
   bps,
   usdCents,
 } from '@jet/shared';
-import type { ORACLE } from '@jet/config';
 import {
   computeMad,
   computeMedian,
@@ -16,6 +15,7 @@ import {
   type UsdMillicents,
 } from './math.js';
 import { spreadTwap } from './twap.js';
+import type { OracleConfig } from './oracle-config.js';
 
 export interface PartitionVenueData {
   /** Stair-step TWAP of (bid+ask)/2 over the partition; null if venue has no live quote. */
@@ -42,8 +42,6 @@ export interface AggPartitionResult {
   madBps: Bps;
 }
 
-type OracleCfg = typeof ORACLE;
-
 /**
  * Aggregate a single 5-second partition:
  * 1. Apply per-venue health gates (MISSING, STALE, CROSSED_BOOK, WIDE_SPREAD).
@@ -54,7 +52,7 @@ export function aggregatePartition(
   venueData: Map<VenueId, PartitionVenueData>,
   partitionStart: TimestampMs,
   partitionEnd: TimestampMs,
-  oracleCfg: OracleCfg,
+  oracleCfg: OracleConfig,
 ): AggPartitionResult {
   const exclusions: ExclusionRecord[] = [];
   const validTwaps = new Map<VenueId, number>();
