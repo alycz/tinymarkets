@@ -12,7 +12,7 @@ import { loadConfig } from './config.js';
 import type { TakersConfig } from './config.js';
 import { buildPersonas } from './persona.js';
 import { TokenBucket } from './rate-limiter.js';
-import { TakerBot } from './taker.js';
+import { TakerSwarm } from './taker.js';
 import { WsClient } from './ws-client.js';
 
 async function sleep(ms: number): Promise<void> {
@@ -68,7 +68,13 @@ async function runMarket(
   const ws = new WsClient(config.wsUrl, {
     onOracle: (event) => {
       const btc = event.snapshot.btcPriceCents as UsdCents;
-      fair = fairYesProbCents(btc, strikeCents, msRemaining, msTotal, config.baseSigma);
+      fair = fairYesProbCents({
+        btcCents: btc,
+        strikeCents,
+        msRemaining,
+        msTotal,
+        volatilityScaleCents: config.volatilityScaleCents,
+      });
     },
     onMarketStatus: (event) => {
       msRemaining = event.msRemaining;
@@ -107,27 +113,32 @@ async function runMarket(
       });
   }, 2_000);
 
-  const bots = buildPersonas(config).map(persona => new TakerBot(
+  const personas = buildPersonas(config);
+  const swarm = new TakerSwarm(
     api,
     marketId,
-    persona,
+    personas,
+    config,
     bucket,
     () => ({
       fair,
-      msRemaining,
       bestPrices: book.bestPrices(),
-      marketOpen,
+      marketOpen: marketOpen && !book.isStale(5_000),
     }),
     finish,
-  ));
+    () => {
+      book.reset();
+      ws.refresh([bookChannel(marketId)]);
+    },
+  );
 
-  for (const bot of bots) bot.start();
-  console.log(`[takers] market ${marketId} open — started ${bots.length} takers`);
+  swarm.start();
+  console.log(`[takers] market ${marketId} open — started ${personas.length} taker personas`);
 
   await done;
 
   finish();
-  for (const bot of bots) bot.stop();
+  swarm.stop();
   ws.destroy();
   book.reset();
   console.log(`[takers] market ${marketId} closed — stopped takers`);

@@ -13,12 +13,14 @@ export interface BestPrices {
 export class BookTracker {
   private marketId: string | null = null;
   private seq = 0;
+  private lastUpdateMs = 0;
   private readonly bids = new Map<number, Shares>();
   private readonly asks = new Map<number, Shares>();
 
   reset(): void {
     this.marketId = null;
     this.seq = 0;
+    this.lastUpdateMs = 0;
     this.bids.clear();
     this.asks.clear();
   }
@@ -26,6 +28,7 @@ export class BookTracker {
   applySnapshot(snapshot: OrderBookSnapshot): void {
     this.marketId = snapshot.marketId;
     this.seq = snapshot.seq;
+    this.lastUpdateMs = snapshot.ts as number;
     this.bids.clear();
     this.asks.clear();
 
@@ -41,6 +44,7 @@ export class BookTracker {
     if (this.marketId !== delta.marketId) return;
     if (delta.seq <= this.seq) return;
     this.seq = delta.seq;
+    this.lastUpdateMs = delta.ts as number;
 
     for (const change of delta.changes) {
       const levels = change.side === 'BID' ? this.bids : this.asks;
@@ -57,6 +61,10 @@ export class BookTracker {
       bestBid: maxKey(this.bids),
       bestAsk: minKey(this.asks),
     };
+  }
+
+  isStale(maxAgeMs: number, nowMs = Date.now()): boolean {
+    return this.lastUpdateMs === 0 || nowMs - this.lastUpdateMs > maxAgeMs;
   }
 }
 

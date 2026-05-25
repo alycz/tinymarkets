@@ -1,18 +1,17 @@
 import { shares } from '@jet/shared';
-import type { PriceCents } from '@jet/shared';
+import type { CanonicalOrder, PriceCents } from '@jet/shared';
 import type { ApiClient } from './api-client.js';
 import type { MmConfig } from './config.js';
-import { buildQuoteLadder } from './pricing.js';
+import { buildLevelSpecs, buildQuoteLadder, dynamicSpreadCents } from './pricing.js';
 
-interface TrackedOrder {
-  orderId: string;
-  side: 'BID' | 'ASK';
-  oddsPriceCents: PriceCents;
+type QuoteSide = 'BID' | 'ASK';
+
+interface ReconcileStats {
+  cancelled: number;
+  placed: number;
 }
 
 export class Quoter {
-  // Keyed by "BID:<oddsPriceCents>" or "ASK:<oddsPriceCents>"
-  private readonly orders = new Map<string, TrackedOrder>();
   private marketId = '';
 
   constructor(
@@ -24,80 +23,118 @@ export class Quoter {
     this.marketId = id;
   }
 
-  onFill(orderId: string): void {
-    for (const [key, tracked] of this.orders) {
-      if (tracked.orderId === orderId) {
-        this.orders.delete(key);
-        break;
-      }
-    }
+  onFill(_orderId: string): void {
+    // Reconciliation on the next tick reads the server truth.
   }
 
-  async tick(fairCents: PriceCents): Promise<void> {
-    if (!this.marketId) return;
+  async tick(
+    fairCents: PriceCents,
+    opts: { recentVolatilityCents: number; msRemaining: number; msTotal: number },
+  ): Promise<ReconcileStats> {
+    if (!this.marketId) return { cancelled: 0, placed: 0 };
 
-    const { levels, halfSpreadCents, levelStepCents, sizePerLevel, botUserId } = this.config;
-    const targetLadder = buildQuoteLadder(fairCents, halfSpreadCents, levels, levelStepCents, sizePerLevel);
-    const targetKeys = new Set(targetLadder.map(l => `${l.side}:${l.oddsPriceCents}`));
+    const spread = dynamicSpreadCents({
+      baseSpreadCents: this.config.baseSpreadCents,
+      recentVolatilityCents: opts.recentVolatilityCents,
+      msRemaining: opts.msRemaining,
+      msTotal: opts.msTotal,
+    });
+    const levelSpecs = buildLevelSpecs(spread, this.config.levelSizes);
+    const targetLadder = buildQuoteLadder(fairCents, levelSpecs);
+    const targets = new Map(targetLadder.map((level) => [levelKey(level.side, level.oddsPriceCents), level]));
+    const openOrders = (await this.api.getOpenOrders(this.config.botUserId))
+      .filter((order) => order.marketId === this.marketId)
+      .filter((order) => order.status === 'OPEN' || order.status === 'PARTIALLY_FILLED');
 
-    // Cancel stale orders (not in the new target ladder)
-    await Promise.all(
-      [...this.orders.entries()]
-        .filter(([key]) => !targetKeys.has(key))
-        .map(([key, tracked]) =>
-          this.api.cancelOrder(tracked.orderId, botUserId)
-            .then(res => {
-              if (res.ok || res.error.code === 'UNKNOWN_ORDER') {
-                this.orders.delete(key);
-              }
-            })
-            .catch(err => console.error(`[quoter] cancel failed for ${key}:`, err)),
-        ),
-    );
+    let cancelled = 0;
+    let placed = 0;
+    const usableByKey = new Map<string, CanonicalOrder[]>();
 
-    // Place orders missing from our tracking
-    await Promise.all(
-      targetLadder
-        .filter(level => !this.orders.has(`${level.side}:${level.oddsPriceCents}`))
-        .map(level => {
-          const key = `${level.side}:${level.oddsPriceCents}`;
-          return this.api.placeOrder({
-            userId: botUserId,
-            marketId: this.marketId,
-            intent: level.side === 'BID' ? 'BUY_YES' : 'SELL_YES',
-            price: level.oddsPriceCents,
-            type: 'LIMIT',
-            size: shares(level.size),
-            tif: 'GTC',
-          })
-            .then(res => {
-              if (res.ok) {
-                this.orders.set(key, {
-                  orderId: res.order.orderId,
-                  side: level.side,
-                  oddsPriceCents: level.oddsPriceCents,
-                });
-              }
-            })
-            .catch(err => console.error(`[quoter] place failed for ${key}:`, err));
-        }),
-    );
+    for (const order of openOrders) {
+      const side = order.yesAction === 'BUY' ? 'BID' : 'ASK';
+      const key = levelKey(side, order.yesPriceCents);
+      if (!targets.has(key)) {
+        if (await this.cancel(order.orderId)) cancelled++;
+        continue;
+      }
+      const orders = usableByKey.get(key) ?? [];
+      orders.push(order);
+      usableByKey.set(key, orders);
+    }
+
+    for (const [key, target] of targets) {
+      const existing = (usableByKey.get(key) ?? [])
+        .sort((a, b) => (a.createdAtMs as number) - (b.createdAtMs as number));
+      let keptSize = 0;
+
+      for (const order of existing) {
+        const remaining = order.remaining as number;
+        if (keptSize >= target.size) {
+          if (await this.cancel(order.orderId)) cancelled++;
+          continue;
+        }
+        if (keptSize + remaining <= target.size) {
+          keptSize += remaining;
+          continue;
+        }
+        if (await this.cancel(order.orderId)) cancelled++;
+      }
+
+      const missingSize = target.size - keptSize;
+      if (missingSize > 0) {
+        const ok = await this.place(target.side, target.oddsPriceCents, missingSize);
+        if (ok) placed++;
+      }
+    }
+
+    return { cancelled, placed };
   }
 
   async cancelAll(): Promise<void> {
-    const { botUserId } = this.config;
-    const entries = [...this.orders.entries()];
-    await Promise.all(
-      entries.map(([key, tracked]) =>
-        this.api.cancelOrder(tracked.orderId, botUserId)
-          .then(() => this.orders.delete(key))
-          .catch(() => {}),
-      ),
-    );
+    const openOrders = await this.api.getOpenOrders(this.config.botUserId);
+    const entries = openOrders.filter((order) => !this.marketId || order.marketId === this.marketId);
+    await Promise.all(entries.map((order) => this.cancel(order.orderId)));
     console.log(`[quoter] cancelled ${entries.length} orders`);
   }
 
-  orderCount(): number {
-    return this.orders.size;
+  async orderCount(): Promise<number> {
+    const openOrders = await this.api.getOpenOrders(this.config.botUserId);
+    return openOrders.filter((order) => !this.marketId || order.marketId === this.marketId).length;
   }
+
+  private async place(side: QuoteSide, oddsPriceCents: PriceCents, size: number): Promise<boolean> {
+    try {
+      const result = await this.api.placeOrder({
+        userId: this.config.botUserId,
+        marketId: this.marketId,
+        intent: side === 'BID' ? 'BUY_YES' : 'SELL_YES',
+        price: oddsPriceCents,
+        type: 'LIMIT',
+        size: shares(size),
+        tif: 'GTC',
+      });
+      if (!result.ok) {
+        console.warn(`[quoter] place rejected ${side}:${oddsPriceCents}: ${result.error.message}`);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.error(`[quoter] place failed ${side}:${oddsPriceCents}:`, err);
+      return false;
+    }
+  }
+
+  private async cancel(orderId: string): Promise<boolean> {
+    try {
+      const result = await this.api.cancelOrder(orderId, this.config.botUserId);
+      return result.ok || result.error.code === 'UNKNOWN_ORDER';
+    } catch (err) {
+      console.error(`[quoter] cancel failed ${orderId}:`, err);
+      return false;
+    }
+  }
+}
+
+function levelKey(side: QuoteSide, price: PriceCents): string {
+  return `${side}:${price as number}`;
 }

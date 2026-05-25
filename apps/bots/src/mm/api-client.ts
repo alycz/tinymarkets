@@ -4,6 +4,7 @@ import type {
   PlaceOrderResponse,
   CancelOrderResponse,
   MarketResponse,
+  UserOrdersResponse,
 } from '@jet/shared';
 import type { Result } from '@jet/shared';
 
@@ -40,5 +41,17 @@ export class ApiClient {
       body: JSON.stringify({ userId }),
     });
     return (await res.json()) as CancelOrderResponse;
+  }
+
+  async getOpenOrders(userId: string): Promise<UserOrdersResponse['orders']> {
+    try {
+      const res = await fetch(`${this.baseUrl}/users/${encodeURIComponent(userId)}/orders`);
+      const body = (await res.json()) as Result<UserOrdersResponse>;
+      if (!body.ok) return [];
+      return body.orders;
+    } catch (err) {
+      console.error('[api] getOpenOrders error:', err);
+      return [];
+    }
   }
 }

@@ -46,7 +46,9 @@ async function runMarket(
   );
 
   let currentFair: PriceCents = oddsPriceCents(50);
+  let lastQuotedFair: PriceCents | null = null;
   let msRemaining = market.msRemaining;
+  const recentOraclePrices: number[] = [];
   let stopped = false;
   let timer: ReturnType<typeof setInterval> | null = null;
   let guardTimer: ReturnType<typeof setInterval> | null = null;
@@ -74,19 +76,40 @@ async function runMarket(
 
   const doTick = (): void => {
     if (stopped) return;
-    const tick = quoter.tick(currentFair)
+    if (activeTicks.size > 0) return;
+    const tick = quoter.tick(currentFair, {
+        recentVolatilityCents: recentVolatility(recentOraclePrices),
+        msRemaining,
+        msTotal,
+      })
+      .then(() => undefined)
       .catch(err => console.error('[mm] tick error:', err))
       .finally(() => {
         activeTicks.delete(tick);
       });
     activeTicks.add(tick);
+    lastQuotedFair = currentFair;
   };
 
   const ws = new WsClient(config.wsUrl, {
     onOracle: (event) => {
       const btc = event.snapshot.btcPriceCents as UsdCents;
-      currentFair = fairYesProbCents(btc, strikeCents, msRemaining, msTotal, config.baseSigma);
-      doTick();
+      recentOraclePrices.push(btc as number);
+      if (recentOraclePrices.length > 12) recentOraclePrices.shift();
+      const nextFair = fairYesProbCents({
+        btcCents: btc,
+        strikeCents,
+        msRemaining,
+        msTotal,
+        volatilityScaleCents: config.volatilityScaleCents,
+      });
+      currentFair = nextFair;
+      if (
+        lastQuotedFair === null ||
+        Math.abs((nextFair as number) - (lastQuotedFair as number)) >= config.requoteFairMoveCents
+      ) {
+        doTick();
+      }
     },
     onMarketStatus: (event) => {
       msRemaining = event.msRemaining;
@@ -138,6 +161,11 @@ async function runMarket(
     console.warn('[mm] cancelAll skipped/failed during market cleanup:', err);
   }
   console.log(`[mm] market ${marketId} closed — stopped quotes`);
+}
+
+function recentVolatility(prices: number[]): number {
+  if (prices.length < 2) return 0;
+  return Math.max(...prices) - Math.min(...prices);
 }
 
 async function main(): Promise<void> {

@@ -1,10 +1,5 @@
-import {
-  MAX_PRICE_CENTS,
-  MIN_PRICE_CENTS,
-  oddsPriceCents,
-  shares,
-} from '@jet/shared';
-import type { Action, PriceCents, Shares, Side } from '@jet/shared';
+import { MAX_PRICE_CENTS, MIN_PRICE_CENTS, oddsPriceCents, shares } from '@jet/shared';
+import type { OrderIntent, PriceCents, Shares } from '@jet/shared';
 import type { TakerPersona } from './persona.js';
 
 export interface DecisionInput {
@@ -12,104 +7,63 @@ export interface DecisionInput {
   persona: TakerPersona;
   bestBid: PriceCents | null;
   bestAsk: PriceCents | null;
-  msRemaining: number;
   rng?: () => number;
 }
 
-export interface TakerDecision {
-  side: Side;
-  action: Action;
-  oddsPriceCents: PriceCents;
-  size: Shares;
-}
-
-const DEFAULT_MAX_ADVERSE_CENTS = 8;
-const NEAR_EXPIRY_MAX_ADVERSE_CENTS = 2;
-const NEAR_EXPIRY_MS = 20_000;
-const FADE_SUPPRESSION_MS = 15_000;
-const CLEAR_WINNER_DISTANCE = 35;
+export type TakerDecision =
+  | {
+      intent: 'BUY_YES';
+      price: PriceCents;
+      size: Shares;
+    }
+  | {
+      intent: 'BUY_NO';
+      price: PriceCents;
+      size: Shares;
+    };
 
 export function decide(input: DecisionInput): TakerDecision | null {
-  const rng = input.rng ?? Math.random;
-  const fadeSuppressed = isFadeSuppressed(input.persona, input.fair, input.msRemaining);
-  const side = chooseSide(input.fair, input.persona, fadeSuppressed, rng);
-  if (side === null) return null;
+  const { bestBid, bestAsk } = input;
+  if (bestBid === null || bestAsk === null) return null;
+  if ((bestBid as number) >= (bestAsk as number)) return null;
 
-  const price = crossingPrice(side, input.bestBid, input.bestAsk, rng);
-  if (price === null) return null;
-  if (!passesFairGate(side, price, input.fair, input.msRemaining)) return null;
+  const rng = input.rng ?? Math.random;
+  const mid = ((bestBid as number) + (bestAsk as number)) / 2;
+  const signalIntent: OrderIntent = (input.fair as number) >= mid ? 'BUY_YES' : 'BUY_NO';
+  const intent = rng() < input.persona.contrarianRatio
+    ? opposite(signalIntent)
+    : signalIntent;
+  const slippage = Math.floor(rng() * (input.persona.maxSlippageCents + 1));
+  const size = randomSmallSize(rng);
+
+  if (intent === 'BUY_YES') {
+    return {
+      intent,
+      price: clampPrice((bestAsk as number) + slippage),
+      size,
+    };
+  }
 
   return {
-    side,
-    action: 'BUY',
-    oddsPriceCents: price,
-    size: shares(input.persona.sizeScale),
+    intent,
+    price: clampPrice(100 - (bestBid as number) + slippage),
+    size,
   };
 }
 
-export function isFadeSuppressed(
-  persona: TakerPersona,
-  fair: PriceCents,
-  msRemaining: number,
-): boolean {
-  return persona.fade > 0 && msRemaining < FADE_SUPPRESSION_MS && Math.abs(fair - 50) > CLEAR_WINNER_DISTANCE;
+export function isCrossedBook(bestBid: PriceCents | null, bestAsk: PriceCents | null): boolean {
+  return bestBid !== null && bestAsk !== null && (bestBid as number) >= (bestAsk as number);
 }
 
-function chooseSide(
-  fair: PriceCents,
-  persona: TakerPersona,
-  fadeSuppressed: boolean,
-  rng: () => number,
-): Side | null {
-  if (persona.fade > 0 && !fadeSuppressed) {
-    return rng() < 0.5 ? 'YES' : 'NO';
-  }
-
-  const fade = fadeSuppressed ? 0 : persona.fade;
-  const pYes = clamp((fair / 100) * persona.lean - fade, 0, 1);
-  const pNo = clamp(((100 - fair) / 100) * persona.lean - fade, 0, 1);
-  const total = pYes + pNo;
-  if (total <= 0) return null;
-
-  return rng() < pYes / total ? 'YES' : 'NO';
+function opposite(intent: OrderIntent): 'BUY_YES' | 'BUY_NO' {
+  return intent === 'BUY_YES' ? 'BUY_NO' : 'BUY_YES';
 }
 
-function crossingPrice(
-  side: Side,
-  bestBid: PriceCents | null,
-  bestAsk: PriceCents | null,
-  rng: () => number,
-): PriceCents | null {
-  if (side === 'YES') {
-    if (bestAsk === null) return null;
-    return clampPrice(bestAsk + jitter(rng));
-  }
-
-  if (bestBid === null) return null;
-  return clampPrice(100 - bestBid + jitter(rng));
-}
-
-function passesFairGate(
-  side: Side,
-  price: PriceCents,
-  fair: PriceCents,
-  msRemaining: number,
-): boolean {
-  const maxAdverse = msRemaining < NEAR_EXPIRY_MS
-    ? NEAR_EXPIRY_MAX_ADVERSE_CENTS
-    : DEFAULT_MAX_ADVERSE_CENTS;
-  const sideFair = side === 'YES' ? fair : 100 - fair;
-  return price <= sideFair + maxAdverse;
-}
-
-function jitter(rng: () => number): number {
-  return rng() < 0.5 ? 0 : 1;
+function randomSmallSize(rng: () => number): Shares {
+  const weighted = 1 + Math.floor(Math.pow(rng(), 1.8) * 25);
+  return shares(Math.min(25, Math.max(1, weighted)));
 }
 
 function clampPrice(raw: number): PriceCents {
   return oddsPriceCents(Math.min(MAX_PRICE_CENTS, Math.max(MIN_PRICE_CENTS, Math.round(raw))));
-}
-
-function clamp(n: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, n));
 }
