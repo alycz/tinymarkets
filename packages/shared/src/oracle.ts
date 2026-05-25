@@ -35,6 +35,11 @@ export type DispersionState = 'NORMAL' | 'ELEVATED' | 'STRESSED' | 'DISLOCATED';
 
 export type ConfidenceLevel = 'HIGH' | 'MEDIUM' | 'LOW';
 export type DemoMode = 'simulated' | 'live' | 'hybrid';
+export type OracleDemoScenario = 'NEAR_EXPIRY_SPIKE' | 'SUBTLE_DISLOCATION';
+export type ResolutionQualityFlag =
+  | 'INSUFFICIENT_VALID_VENUES'
+  | 'HIGH_DISPERSION'
+  | 'NEAR_THRESHOLD';
 
 /** Per-venue health for the transparency panel. Drives include/exclude — NEVER weighting. */
 export interface VenueHealth {
@@ -124,9 +129,11 @@ export interface RampResolution {
   /** LOW when the resolution price lands within the confidence band of the threshold */
   confidence: ConfidenceLevel;
   dispersionState: DispersionState;
+  qualityFlags: ResolutionQualityFlag[];
   sourcesUsed: VenueId[];
+  sourceUsage: { venue: VenueId; partitionsUsed: number; partitionsExcluded: number }[];
   sourcesExcluded: { venue: VenueId; reason: VenueExclusionReason; deviationBps?: Bps }[];
-  /** sha256 of the canonical input samples — anyone can replay and verify */
+  /** sha256 of canonical resolution-affecting inputs — anyone can replay and verify */
   inputHash: string;
 }
 

@@ -307,9 +307,9 @@ describe('clearOpenOrders', () => {
 
     const { orders, delta } = clob.clearOpenOrders();
 
-    expect(r2.delta.seq).toBeGreaterThan(r1.delta.seq);
-    expect(snap.seq).toBe(r2.delta.seq);
-    expect(r3.delta.seq).toBe(snap.seq + 1);
+    expect(orders).toEqual([]);
+    expect(delta).toBeNull();
+    expect(clob.snapshot().seq).toBe(before.seq);
   });
 
   it('multiple clients can snapshot before a mutation and both accept the next delta', () => {

@@ -5,12 +5,10 @@ import {
   type UsdCents,
   bps,
 } from '@jet/shared';
-import type { ORACLE } from '@jet/config';
-
-type OracleCfg = typeof ORACLE;
+import type { OracleConfig } from './oracle-config.js';
 
 /** Bucket the cross-venue MAD-bps into a dispersion regime. */
-export function classifyDispersion(madBps: number, oracleCfg: OracleCfg): DispersionState {
+export function classifyDispersion(madBps: number, oracleCfg: OracleConfig): DispersionState {
   if (madBps >= oracleCfg.dispersion.dislocatedBps) return 'DISLOCATED';
   if (madBps >= oracleCfg.dispersion.stressedBps) return 'STRESSED';
   if (madBps >= oracleCfg.dispersion.elevatedBps) return 'ELEVATED';
@@ -29,7 +27,7 @@ export function classifyDispersion(madBps: number, oracleCfg: OracleCfg): Disper
 export function deriveConfidence(
   dispersionBps: Bps,
   dispersionState: DispersionState,
-  oracleCfg: OracleCfg,
+  oracleCfg: OracleConfig,
   survivorCount: number,
   partitionVarianceBps: Bps,
   resolutionPriceCents?: UsdCents,

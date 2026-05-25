@@ -1,9 +1,9 @@
-import { ORACLE } from '@jet/config';
 import {
   type Bps,
   type MarketConfig,
   type PartitionResult,
   type RampResolution,
+  type ResolutionQualityFlag,
   type Side,
   type TimestampMs,
   type UsdCents,
@@ -19,22 +19,23 @@ import type { PartitionVenueData } from './partition.js';
 import { midTwapMillicents } from './twap.js';
 import { aggregatePartition } from './partition.js';
 import { classifyDispersion, deriveConfidence } from './dispersion.js';
-import { inputHashFromSamples } from './hash.js';
+import { inputHashFromResolutionInputs } from './hash.js';
 import { computeMedian, roundMillicentsToCentsHalfUp, type UsdMillicents } from './math.js';
+import type { OracleConfig, PartitionAggregation } from './oracle-config.js';
 
 export interface ResolveMarketParams {
   config: MarketConfig;
   adapters: readonly VenueAdapter[];
   /** Settlement time — the oracle window is [now - windowMs, now]. */
   now: TimestampMs;
-  oracleCfg: typeof ORACLE;
+  oracleCfg: OracleConfig;
   /** Override partition aggregation; defaults to oracleCfg.partitionAggregation. */
-  partitionAggregation?: 'median' | 'mean' | 'trimmed_mean';
+  partitionAggregation?: PartitionAggregation;
 }
 
 function aggregatePartitionPrices(
   prices: readonly UsdMillicents[],
-  method: 'median' | 'mean' | 'trimmed_mean',
+  method: PartitionAggregation,
 ): UsdCents {
   if (prices.length === 0) return usdCents(0);
   const sorted = [...prices].sort((a, b) => a - b);
@@ -82,19 +83,25 @@ export function resolveMarket({
     allSamplesMap.set(adapter.venueId, samples);
   }
 
-  // Collect window-only samples for inputHash
-  const windowSamples: VenueQuote[] = [];
-  for (const adapter of adapters) {
-    const s = adapter.samplesBetween(windowStart, windowEnd);
-    windowSamples.push(...s);
-  }
-  const inputHash = inputHashFromSamples(windowSamples);
+  const inputSamples = [...allSamplesMap.values()].flat();
+  const inputHash = inputHashFromResolutionInputs({
+    samples: inputSamples,
+    venues: adapters.map(adapter => ({ venueId: adapter.venueId, quote: adapter.quote })),
+    config,
+    expiryTs: now,
+    oracleCfg,
+    partitionAggregation: aggMethod,
+  });
 
   const partitions: PartitionResult[] = [];
   const partitionPriceMillicents: UsdMillicents[] = [];
   const partitionMadBps: number[] = [];
   const allExclusionsByVenue = new Map<VenueId, { reason: VenueExclusionReason; deviationBps?: Bps }>();
   const allSurvivorVenues = new Set<VenueId>();
+  const sourceUsageByVenue = new Map<VenueId, { partitionsUsed: number; partitionsExcluded: number }>();
+  for (const adapter of adapters) {
+    sourceUsageByVenue.set(adapter.venueId, { partitionsUsed: 0, partitionsExcluded: 0 });
+  }
 
   for (let p = 0; p < partitionCount; p++) {
     const partitionStart = timestampMs(windowStart + p * partitionMs);
@@ -129,9 +136,13 @@ export function resolveMarket({
       }
     }
 
-    // Track survivors
+    const excludedThisPartition = new Set(agg.exclusions.map(e => e.venue));
     for (const adapter of adapters) {
-      if (!agg.exclusions.some(e => e.venue === adapter.venueId)) {
+      const usage = sourceUsageByVenue.get(adapter.venueId)!;
+      if (excludedThisPartition.has(adapter.venueId)) {
+        usage.partitionsExcluded += 1;
+      } else {
+        usage.partitionsUsed += 1;
         allSurvivorVenues.add(adapter.venueId);
       }
     }
@@ -167,6 +178,12 @@ export function resolveMarket({
   );
 
   const outcome: Side = resolutionPriceCents > config.thresholdCents ? 'YES' : 'NO';
+  const thresholdBandCents = Math.round((config.thresholdCents * confidenceBps) / 10_000);
+  const nearThreshold = Math.abs(resolutionPriceCents - config.thresholdCents) <= thresholdBandCents;
+  const qualityFlags: ResolutionQualityFlag[] = [];
+  if (hasUnderservedPartition) qualityFlags.push('INSUFFICIENT_VALID_VENUES');
+  if (dispersionState !== 'NORMAL') qualityFlags.push('HIGH_DISPERSION');
+  if (nearThreshold) qualityFlags.push('NEAR_THRESHOLD');
 
   const sourcesExcluded = [...allExclusionsByVenue.entries()].map(([venue, e]) => ({
     venue,
@@ -177,6 +194,11 @@ export function resolveMarket({
   const sourcesUsed = adapters
     .map(a => a.venueId)
     .filter(v => allSurvivorVenues.has(v));
+  const sourceUsage = adapters.map(adapter => ({
+    venue: adapter.venueId,
+    partitionsUsed: sourceUsageByVenue.get(adapter.venueId)?.partitionsUsed ?? 0,
+    partitionsExcluded: sourceUsageByVenue.get(adapter.venueId)?.partitionsExcluded ?? 0,
+  }));
 
   return {
     marketId: config.marketId,
@@ -200,7 +222,9 @@ export function resolveMarket({
     confidenceBps,
     confidence,
     dispersionState,
+    qualityFlags,
     sourcesUsed,
+    sourceUsage,
     sourcesExcluded,
     inputHash,
   };

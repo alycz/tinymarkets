@@ -1,6 +1,7 @@
 import { MARKET } from '@jet/config';
 import {
   type CanonicalOrder,
+  type DemoScenarioResponse,
   type DemoSpikeResponse,
   type DemoMode,
   type Fill,
@@ -27,6 +28,7 @@ import { Clob } from '@jet/clob';
 import { MarketCore } from '@jet/market-core';
 import { RampOracle } from '@jet/oracle';
 import type { ScenarioName } from '@jet/oracle';
+import type { OracleDemoScenario } from '@jet/shared';
 import type { Broadcaster } from './broadcasts.js';
 
 type OkResult<T> = { ok: true } & T;
@@ -161,7 +163,7 @@ export class MarketSession {
     return this.lastUserResolutions.get(userId) ?? null;
   }
 
-  armDemoSpike(marketId: MarketId): Result<DemoSpikeResponse> {
+  armDemoScenario(marketId: MarketId, scenario: OracleDemoScenario): Result<DemoScenarioResponse> {
     if (!this.config || this.status === null) {
       return err('UNKNOWN_MARKET', 'No active market');
     }
@@ -171,10 +173,14 @@ export class MarketSession {
     if (this.status === 'resolved') {
       return err('MARKET_NOT_OPEN', 'Market is already resolved');
     }
-    if (!this.oracle.armScenario('NEAR_EXPIRY_SPIKE')) {
+    if (!this.oracle.armScenario(scenario)) {
       return err('UNKNOWN_MARKET', 'Oracle is not active for this market');
     }
-    return { ok: true, scenario: 'NEAR_EXPIRY_SPIKE' };
+    return { ok: true, scenario };
+  }
+
+  armDemoSpike(marketId: MarketId): Result<DemoSpikeResponse> {
+    return this.armDemoScenario(marketId, 'NEAR_EXPIRY_SPIKE') as Result<DemoSpikeResponse>;
   }
 
   placeOrder(req: PlaceOrderRequest): Result<{ order: CanonicalOrder; fills: Fill[] }> {

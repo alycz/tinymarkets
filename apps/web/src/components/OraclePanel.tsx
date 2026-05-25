@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type {
   AttackCostEstimate,
-  DemoSpikeResponse,
+  DemoScenarioResponse,
   DispersionState,
   IndicativeSnapshot,
   MarketId,
   MarketStatus,
+  OracleDemoScenario,
   RampResolution,
   Result,
   TimestampMs,
@@ -38,9 +39,9 @@ const DISPERSION_COLOR: Record<DispersionState, string> = {
 };
 
 type DemoState =
-  | { status: 'idle'; attackCostEstimate: AttackCostEstimate | null; error: string | null }
-  | { status: 'arming'; attackCostEstimate: AttackCostEstimate | null; error: string | null }
-  | { status: 'armed'; attackCostEstimate: AttackCostEstimate | null; error: string | null };
+  | { status: 'idle'; scenario: OracleDemoScenario | null; attackCostEstimate: AttackCostEstimate | null; error: string | null }
+  | { status: 'arming'; scenario: OracleDemoScenario | null; attackCostEstimate: AttackCostEstimate | null; error: string | null }
+  | { status: 'armed'; scenario: OracleDemoScenario; attackCostEstimate: AttackCostEstimate | null; error: string | null };
 
 export default function OraclePanel({
   oracleSnapshot,
@@ -54,25 +55,31 @@ export default function OraclePanel({
 }: Props) {
   const [demo, setDemo] = useState<DemoState>({
     status: 'idle',
+    scenario: null,
     attackCostEstimate: null,
     error: null,
   });
 
   useEffect(() => {
-    setDemo({ status: 'idle', attackCostEstimate: null, error: null });
+    setDemo({ status: 'idle', scenario: null, attackCostEstimate: null, error: null });
   }, [marketId]);
 
-  async function armSpikeDemo() {
-    setDemo((prev) => ({ ...prev, status: 'arming', error: null }));
+  async function armDemoScenario(scenario: OracleDemoScenario) {
+    setDemo((prev) => ({ ...prev, status: 'arming', scenario, error: null }));
     try {
-      const res = await fetch(`${apiUrl}/markets/${marketId}/oracle/demo-spike`, { method: 'POST' });
-      const data = await res.json() as Result<DemoSpikeResponse>;
+      const res = await fetch(`${apiUrl}/markets/${marketId}/oracle/demo`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ scenario }),
+      });
+      const data = await res.json() as Result<DemoScenarioResponse>;
       if (!data.ok) {
         setDemo((prev) => ({ ...prev, status: 'idle', error: data.error.message }));
         return;
       }
       setDemo({
         status: 'armed',
+        scenario: data.scenario,
         attackCostEstimate: data.attackCostEstimate ?? null,
         error: null,
       });
@@ -85,7 +92,7 @@ export default function OraclePanel({
     <DemoControl
       demo={demo}
       marketStatus={marketStatus}
-      onArm={() => void armSpikeDemo()}
+      onArm={(scenario) => void armDemoScenario(scenario)}
     />
   );
 
@@ -267,7 +274,12 @@ function PostResolution({
         </div>
         <div>
           <div style={metaLabel}>DISPERSION</div>
-          <Pill text={resolution.dispersionState} color={dispColor} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: S.xs, flexWrap: 'wrap' }}>
+            <Pill text={resolution.dispersionState} color={dispColor} />
+            {resolution.qualityFlags.map(flag => (
+              <Pill key={flag} text={flag.replaceAll('_', ' ')} color={flag === 'NEAR_THRESHOLD' ? C.warn : C.bad} small />
+            ))}
+          </div>
         </div>
         <div>
           <div style={metaLabel}>MY PnL</div>
@@ -311,6 +323,17 @@ function PostResolution({
         <PartitionRows partitions={resolution.partitions} />
       </div>
 
+      <div style={sectionStyle}>
+        <div style={{ ...metaLabel, marginBottom: S.xs }}>SOURCE USAGE</div>
+        <div style={sourceUsageGridStyle}>
+          {resolution.sourceUsage.map((s) => (
+            <div key={s.venue} style={{ color: C.text, fontSize: 12 }}>
+              <strong>{s.venue}</strong> {s.partitionsUsed}/{resolution.window.partitionCount} used
+            </div>
+          ))}
+        </div>
+      </div>
+
       {attackCostEstimate && <AttackCost estimate={attackCostEstimate} />}
     </Panel>
   );
@@ -323,26 +346,58 @@ function DemoControl({
 }: {
   demo: DemoState;
   marketStatus: MarketStatus;
-  onArm: () => void;
+  onArm: (scenario: OracleDemoScenario) => void;
 }) {
   const disabled = demo.status === 'arming' || marketStatus === 'resolved';
   return (
-    <div style={{ marginLeft: 'auto', minWidth: 190 }}>
-      <button
-        type="button"
-        onClick={onArm}
-        disabled={disabled}
-        style={{
-          ...demoButtonStyle,
-          opacity: disabled ? 0.55 : 1,
-          cursor: disabled ? 'default' : 'pointer',
-        }}
-      >
-        {demo.status === 'arming' ? 'Arming spike...' : demo.status === 'armed' ? 'Spike Demo Armed' : 'Arm Spike Demo'}
-      </button>
-      {demo.error && <div style={{ color: C.bad, fontSize: 11, marginTop: S.xs }}>{demo.error}</div>}
+    <div style={{ marginLeft: 'auto', minWidth: 250 }}>
+      <div style={{ display: 'flex', gap: S.xs, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <DemoButton
+          label={buttonLabel(demo, 'NEAR_EXPIRY_SPIKE')}
+          disabled={disabled}
+          onClick={() => onArm('NEAR_EXPIRY_SPIKE')}
+        />
+        <DemoButton
+          label={buttonLabel(demo, 'SUBTLE_DISLOCATION')}
+          disabled={disabled}
+          onClick={() => onArm('SUBTLE_DISLOCATION')}
+        />
+      </div>
+      {demo.error && <div style={{ color: C.bad, fontSize: 11, marginTop: S.xs, textAlign: 'right' }}>{demo.error}</div>}
     </div>
   );
+}
+
+function DemoButton({
+  label,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        ...demoButtonStyle,
+        opacity: disabled ? 0.55 : 1,
+        cursor: disabled ? 'default' : 'pointer',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function buttonLabel(demo: DemoState, scenario: OracleDemoScenario): string {
+  const name = scenario === 'NEAR_EXPIRY_SPIKE' ? 'Spike' : 'Subtle';
+  if (demo.status === 'arming' && demo.scenario === scenario) return `Arming ${name}...`;
+  if (demo.status === 'armed' && demo.scenario === scenario) return `${name} Armed`;
+  return `Arm ${name}`;
 }
 
 function Metric({ label, value, note }: { label: string; value: string; note?: string }) {
@@ -528,6 +583,12 @@ const partitionRowStyle: CSSProperties = {
   fontSize: 12,
   padding: '4px 0',
   borderBottom: `1px solid ${C.border}44`,
+};
+
+const sourceUsageGridStyle: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+  gap: S.xs,
 };
 
 const demoButtonStyle: CSSProperties = {

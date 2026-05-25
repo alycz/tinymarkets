@@ -40,7 +40,7 @@ What is simulated:
 - Bots are local processes.
 - There is no persistence, wallet, signature flow, custody, or on-chain settlement.
 
-The manipulation demo is also simulated. Pressing `Arm Spike Demo` changes the oracle scenario to a near-expiry single-venue spike. The point is to show that this implementation resists that specific one-venue spike through median aggregation and outlier exclusion. It is not a claim that manipulation is impossible.
+The manipulation demo is also simulated. The oracle controls can arm either a near-expiry single-venue spike or a subtler single-venue dislocation. The point is to show that this implementation resists those one-venue stresses through median aggregation, partitioning, and outlier exclusion. It is not a claim that manipulation is impossible.
 
 ## 2. System Architecture
 
@@ -74,6 +74,7 @@ REST is used for commands and one-shot snapshots:
 - `GET /users/:userId/positions`
 - `POST /orders`
 - `POST /orders/:orderId/cancel`
+- `POST /markets/:marketId/oracle/demo`
 - `POST /markets/:marketId/oracle/demo-spike`
 
 WebSocket is used for all live streams at `/ws`. Clients subscribe to typed channel strings:
@@ -260,7 +261,7 @@ A venue can be excluded for:
 
 MAD is median absolute deviation among candidate venue TWAPs. Using MAD makes the outlier rule adapt to current cross-venue dispersion instead of relying only on a fixed band.
 
-The config requires at least three valid venues. In the current implementation, a partition with too few valid venues is still priced from available data, but the window-level resolution is marked `DISLOCATED`. Production should decide whether that state extends the window, pauses settlement, or triggers a refund/dispute path.
+The config requires at least three valid venues. In the demo implementation, a partition with too few valid venues is still priced from available data by the strict deterministic rule, but the window-level resolution is marked `DISLOCATED` and includes the `INSUFFICIENT_VALID_VENUES` quality flag. That is intentional surfacing, not silent acceptance. Production should decide whether that state extends the window, pauses settlement, triggers a refund, or opens a dispute path.
 
 ### Dispersion, Confidence, And Circuit Breaker
 
@@ -319,17 +320,23 @@ The output is a full `RampResolution` object:
 - partition prices and venue counts,
 - resolution price and outcome,
 - confidence and dispersion state,
+- quality flags,
 - sources used,
+- per-source partition usage,
 - sources excluded with reasons and outlier deviations,
 - `inputHash`.
 
-`inputHash` is a SHA-256 hash of canonical sorted input samples. Samples are sorted by timestamp, venue, bid, and ask, then serialized into compact JSON. That makes a resolution replayable from the same input samples and rule version.
+`sourcesUsed` means a venue survived at least one final-window partition. `sourceUsage` gives the partition count detail: how many of the six partitions each venue contributed to and how many excluded it.
+
+`inputHash` is a SHA-256 hash of canonical resolution-affecting inputs. It covers every sample fetched for settlement replay, including the stale lead-in interval from `windowStart - staleMs` through `windowEnd`, plus venue IDs and quote currencies, market ID, threshold, expiry timestamp, rule version, oracle config values, and the effective aggregation method. Samples and metadata are sorted before hashing so adapter/sample ordering does not change the hash.
 
 ### Manipulation Demo
 
 The `NEAR_EXPIRY_SPIKE` scenario replaces the simulated Binance adapter with one that spikes +1500 bps in the last 5-second partition. The oracle tests assert that Binance is excluded as an outlier and that the outcome matches the honest baseline for that scenario.
 
-The web button `Arm Spike Demo` calls `POST /markets/:marketId/oracle/demo-spike`. The response type allows an optional `attackCostEstimate`, and the UI can display one, but the current API path does not populate that estimate. The built demo is therefore about venue exclusion, partitioning, and replay transparency, not a measured or simulated liquidity-cost calculation.
+The `SUBTLE_DISLOCATION` scenario moves one venue roughly 20 bps near expiry across multiple final-window partitions. It is meant to show a less cartoonish stress case: one venue can create visible dispersion or outlier exclusions, but the final median-of-partitions result remains deterministic and does not flip against the honest venue consensus.
+
+The web controls call `POST /markets/:marketId/oracle/demo` with either `NEAR_EXPIRY_SPIKE` or `SUBTLE_DISLOCATION`. The legacy `POST /markets/:marketId/oracle/demo-spike` route remains as a compatibility wrapper for the spike scenario. The response type allows an optional `attackCostEstimate`, and the UI can display one, but the current API path does not populate that estimate. The built demo is therefore about venue exclusion, partitioning, and replay transparency, not a measured or simulated liquidity-cost calculation.
 
 ### Production Improvements
 
@@ -345,7 +352,7 @@ The frontend is a single dense market page rather than a landing page. It priori
 - Account panel with available cash, reserved order funds, OI collateral share, position, average entry, and unrealized PnL.
 - YES book ladder showing YES and complementary NO prices.
 - Recent trades with side, price, size, and fill kind.
-- Oracle panel with method, final-window countdown, live indicative price, dispersion, confidence, venue health, forming resolution partitions, final resolution, sources used/excluded, input hash, and user PnL.
+- Oracle panel with method, final-window countdown, live indicative price, dispersion, confidence, venue health, forming resolution partitions, final resolution, quality flags, sources used/excluded, source usage, input hash, and user PnL.
 
 The chart's live price is the indicative oracle price, not the settlement price. During the final 30 seconds, the oracle snapshot can include `formingResolution`, and the panel shows the forming partition median separately. This split is intentional: users need a responsive displayed price for trading, but settlement uses the final-window benchmark.
 
