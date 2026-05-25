@@ -34,7 +34,7 @@ pnpm demo
 
 ## What Is Built
 
-- React + Vite single market page with chart, strike line, trade ticket, account panel, order book, recent trades, countdown, and oracle transparency panel.
+- React + Vite single market page with a primary YES share-price chart, compact BTC oracle reference chart, trade ticket, account panel, order book, recent trades, countdown, and oracle transparency panel.
 - Fastify REST API plus WebSocket server at `/ws`.
 - One canonical YES CLOB with price-time priority, GTC/IOC limit orders, partial fills, cancel, snapshots, deltas, and recent trades.
 - Signed-position ledger: positive net is long YES, negative net is long NO.

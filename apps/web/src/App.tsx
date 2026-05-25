@@ -7,6 +7,7 @@ import { useOrderBook } from './hooks/useOrderBook.js';
 import { useTrades } from './hooks/useTrades.js';
 import { useUser } from './hooks/useUser.js';
 import { usePriceHistory } from './hooks/usePriceHistory.js';
+import { useSharePriceHistory } from './hooks/useSharePriceHistory.js';
 import MarketPage from './components/MarketPage.js';
 import { API_URL, WS_URL, DEMO_USER_ID } from './env.js';
 import { C, S } from './theme.js';
@@ -31,7 +32,8 @@ export default function App() {
     userResolution,
     refreshUserSnapshot,
   } = useUser(DEMO_USER_ID, marketId, API_URL, send, lastEvent, status);
-  const priceHistory = usePriceHistory(oracleSnapshot);
+  const oraclePriceHistory = usePriceHistory(marketId, API_URL, oracleSnapshot);
+  const sharePriceHistory = useSharePriceHistory(marketId, API_URL, send, lastEvent, status);
 
   useEffect(() => {
     fetch(`${API_URL}/markets/current`)
@@ -77,7 +79,8 @@ export default function App() {
           openOrders={openOrders}
           userResolution={userResolution}
           refreshUserSnapshot={refreshUserSnapshot}
-          priceHistory={priceHistory}
+          oraclePriceHistory={oraclePriceHistory}
+          sharePriceHistory={sharePriceHistory}
           userId={DEMO_USER_ID}
           apiUrl={API_URL}
           onStartNew={() => void startDemo()}

@@ -54,7 +54,16 @@ export function useMarket(
     if (!lastEvent || !marketId) return;
 
     switch (lastEvent.type) {
-      case 'market:status':
+      case 'market_snapshot':
+        if (lastEvent.market.config.marketId === marketId) {
+          setMarketStatus(lastEvent.market.status);
+          setMsRemaining(lastEvent.market.msRemaining);
+          setServerTs(lastEvent.serverTs);
+          setExpiryMs(lastEvent.market.expiryMs);
+          setResolution(lastEvent.market.resolution ?? null);
+        }
+        break;
+      case 'market_status':
         if (lastEvent.marketId === marketId) {
           setMarketStatus(lastEvent.status);
           setMsRemaining(lastEvent.msRemaining);
@@ -62,12 +71,19 @@ export function useMarket(
           setExpiryMs(lastEvent.expiryMs);
         }
         break;
-      case 'oracle:price':
+      case 'countdown':
+        if (lastEvent.marketId === marketId) {
+          setMsRemaining(lastEvent.msRemaining);
+          setServerTs(lastEvent.serverTs);
+          setExpiryMs(lastEvent.expiryMs);
+        }
+        break;
+      case 'oracle_price':
         if (lastEvent.snapshot.marketId === marketId) {
           setOracleSnapshot(lastEvent.snapshot);
         }
         break;
-      case 'market:resolved':
+      case 'resolution':
         if (lastEvent.resolution.marketId === marketId) {
           setResolution(lastEvent.resolution);
         }

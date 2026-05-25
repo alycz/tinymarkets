@@ -12,12 +12,16 @@ import {
   type OrderBookSnapshot,
   type OrderId,
   type PlaceOrderRequest,
+  type PriceCents,
   type RampResolution,
+  type SharePricePoint,
   type SignedShares,
   type Trade,
   type UserId,
   type UserResolutionEvent,
   type UserSnapshot,
+  noPriceCents,
+  oddsPriceCents,
   shares,
   signedShares,
   timestampMs,
@@ -54,6 +58,10 @@ export class MarketSession {
 
   private tradeRing: Trade[] = [];
   private readonly tradeRingCap = 100;
+  private oracleSeries: IndicativeSnapshot[] = [];
+  private readonly oracleSeriesCap = 600;
+  private sharePriceSeries: SharePricePoint[] = [];
+  private readonly sharePriceSeriesCap = 600;
   private orderReserves = new Map<OrderId, OrderReserve>();
 
   private knownUsers = new Set<UserId>();
@@ -69,6 +77,7 @@ export class MarketSession {
     });
 
     this.oracle.onSnapshot((snap) => {
+      this.pushOracleSnapshot(snap);
       this.broadcaster?.oraclePrice(snap);
     });
   }
@@ -97,15 +106,20 @@ export class MarketSession {
     this.expiryMs = expiry;
     this.openedAtMs = now;
     this.tradeRing = [];
+    this.oracleSeries = [];
+    this.sharePriceSeries = [];
     this.orderReserves = new Map();
     this.knownUsers = new Set();
     this.lastResolution = null;
     this.lastUserResolutions = new Map();
 
     this.oracle.start(marketId, this.config, timestampMs(expiry));
+    this.recordAndBroadcastSharePrice(this.buildMarkSharePricePoint(timestampMs(now)));
     this.tickInterval = setInterval(() => this.tick(), 1000);
 
-    return this.buildMarketState();
+    const state = this.buildMarketState();
+    this.broadcaster?.marketSnapshot(state);
+    return state;
   }
 
   destroy(): void {
@@ -142,6 +156,16 @@ export class MarketSession {
 
   getRecentTrades(limit = 100): Trade[] {
     const ring = this.tradeRing;
+    return limit >= ring.length ? [...ring] : ring.slice(-limit);
+  }
+
+  getSharePriceSeries(limit = 600): SharePricePoint[] {
+    const ring = this.sharePriceSeries;
+    return limit >= ring.length ? [...ring] : ring.slice(-limit);
+  }
+
+  getOracleSeries(limit = 600): IndicativeSnapshot[] {
+    const ring = this.oracleSeries;
     return limit >= ring.length ? [...ring] : ring.slice(-limit);
   }
 
@@ -236,6 +260,14 @@ export class MarketSession {
       const { trade, fills } = this.marketCore.applyMatch(match, now);
       this.pushTrade(trade);
       this.broadcaster?.trade(trade);
+      this.recordAndBroadcastSharePrice({
+        marketId: this.config.marketId,
+        ts: now,
+        yesPriceCents: trade.yesPriceCents,
+        noPriceCents: noPriceCents(trade.yesPriceCents),
+        source: 'trade',
+        ...this.currentBestPrices(),
+      });
 
       for (const fill of fills) {
         this.broadcaster?.userFill(fill.userId, fill);
@@ -250,7 +282,11 @@ export class MarketSession {
       const pos = this.marketCore.getPosition(userId);
       this.broadcaster?.userBalance(userId, bal);
       this.broadcaster?.userPosition(userId, pos);
+      this.broadcaster?.userOpenOrders(userId, this.clob.openOrdersFor(userId));
     }
+
+    this.recordAndBroadcastSharePrice(this.buildMarkSharePricePoint(now));
+    this.broadcaster?.userOpenOrders(req.userId, this.clob.openOrdersFor(req.userId));
 
     return {
       ok: true,
@@ -279,6 +315,9 @@ export class MarketSession {
 
     this.releaseOrderReserve(orderId);
     this.broadcaster?.bookDelta(delta);
+    this.recordAndBroadcastSharePrice(this.buildMarkSharePricePoint(timestampMs(Date.now())));
+    this.broadcaster?.userOrderCancelled(userId, orderId, this.clob.openOrdersFor(userId));
+    this.broadcaster?.userBalance(userId, this.marketCore.getBalance(userId));
     return { ok: true, orderId };
   }
 
@@ -304,6 +343,60 @@ export class MarketSession {
     if (this.tradeRing.length > this.tradeRingCap) {
       this.tradeRing.shift();
     }
+  }
+
+  private pushOracleSnapshot(snapshot: IndicativeSnapshot): void {
+    this.oracleSeries.push(snapshot);
+    if (this.oracleSeries.length > this.oracleSeriesCap) {
+      this.oracleSeries.shift();
+    }
+  }
+
+  private pushSharePrice(point: SharePricePoint): void {
+    this.sharePriceSeries.push(point);
+    if (this.sharePriceSeries.length > this.sharePriceSeriesCap) {
+      this.sharePriceSeries.shift();
+    }
+  }
+
+  private recordAndBroadcastSharePrice(point: SharePricePoint): void {
+    this.pushSharePrice(point);
+    this.broadcaster?.sharePrice(point);
+  }
+
+  private currentBestPrices(): { bestBid?: PriceCents; bestAsk?: PriceCents } {
+    const snap = this.clob?.snapshot();
+    const bestBid = snap?.bids[0]?.yesPriceCents;
+    const bestAsk = snap?.asks[0]?.yesPriceCents;
+    return {
+      ...(bestBid !== undefined ? { bestBid } : {}),
+      ...(bestAsk !== undefined ? { bestAsk } : {}),
+    };
+  }
+
+  private buildMarkSharePricePoint(ts: ReturnType<typeof timestampMs>): SharePricePoint {
+    const best = this.currentBestPrices();
+    const lastTrade = this.tradeRing.at(-1)?.yesPriceCents;
+    const source = best.bestBid !== undefined && best.bestAsk !== undefined ? 'mid' : 'mark';
+    const rawPrice =
+      best.bestBid !== undefined && best.bestAsk !== undefined
+        ? Math.round(((best.bestBid as number) + (best.bestAsk as number)) / 2)
+        : lastTrade !== undefined
+        ? (lastTrade as number)
+        : best.bestBid !== undefined
+        ? (best.bestBid as number)
+        : best.bestAsk !== undefined
+        ? (best.bestAsk as number)
+        : 50;
+    const yesPriceCents = oddsPriceCents(Math.min(99, Math.max(1, rawPrice)));
+    return {
+      marketId: this.config!.marketId,
+      ts,
+      yesPriceCents,
+      noPriceCents: noPriceCents(yesPriceCents),
+      source,
+      ...best,
+    };
   }
 
   private tick(): void {
@@ -350,8 +443,9 @@ export class MarketSession {
       const pos = this.marketCore.getPosition(userId);
       const netAtResolution = preResolveNets.get(userId) ?? signedShares(0);
       const userResolution: UserResolutionEvent = {
-        type: 'user:resolution',
+        type: 'pnl_update',
         marketId: this.config.marketId,
+        userId,
         outcome: resolution.outcome,
         netAtResolution,
         payoutCents: payouts.get(userId) ?? usdCents(0),
@@ -362,6 +456,7 @@ export class MarketSession {
       this.broadcaster?.userResolution(userId, userResolution);
       this.broadcaster?.userBalance(userId, bal);
       this.broadcaster?.userPosition(userId, pos);
+      this.broadcaster?.userOpenOrders(userId, this.clob?.openOrdersFor(userId) ?? []);
     }
 
     this.clearTimers();
@@ -396,9 +491,11 @@ export class MarketSession {
 
     const snapshot = this.clob.snapshot();
     this.broadcaster?.bookSnapshot(snapshot);
+    this.recordAndBroadcastSharePrice(this.buildMarkSharePricePoint(timestampMs(Date.now())));
 
     for (const userId of affectedUsers) {
       this.broadcaster?.userBalance(userId, this.marketCore.getBalance(userId));
+      this.broadcaster?.userOpenOrders(userId, this.clob.openOrdersFor(userId));
     }
   }
 

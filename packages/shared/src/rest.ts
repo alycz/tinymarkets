@@ -1,7 +1,8 @@
 import type { OrderBookSnapshot } from './orderbook';
 import type { CanonicalOrder, PlaceOrderRequest } from './orders';
-import type { Position, UserSnapshot } from './positions';
-import type { AttackCostEstimate, OracleDemoScenario } from './oracle';
+import type { Balance, Position, UserSnapshot } from './positions';
+import type { AttackCostEstimate, IndicativeSnapshot, OracleDemoScenario } from './oracle';
+import type { SharePricePoint } from './share-price';
 import type { Trade } from './trades';
 import type { MarketState } from './market';
 import type { Fill } from './trades';
@@ -15,8 +16,12 @@ import type { OrderId } from './units';
  *   GET  /markets/:marketId               -> MarketResponse
  *   GET  /markets/:marketId/orderbook     -> OrderBookResponse
  *   GET  /markets/:marketId/trades        -> TradesResponse
+ *   GET  /markets/:marketId/share-price-series -> SharePriceSeriesResponse
+ *   GET  /markets/:marketId/oracle-series -> OracleSeriesResponse
  *   GET  /users/:userId                   -> UserResponse
+ *   GET  /users/:userId/balance           -> BalanceResponse
  *   GET  /users/:userId/positions         -> PositionsResponse
+ *   GET  /users/:userId/orders            -> UserOrdersResponse
  *   POST /orders            (PlaceOrderRequest)        -> PlaceOrderResponse
  *   POST /orders/:orderId/cancel                       -> CancelOrderResponse
  *   POST /markets/start-demo                           -> StartDemoResponse
@@ -46,8 +51,12 @@ export type Result<T> = Ok<T> | Err;
 export interface MarketResponse { market: MarketState; }
 export interface OrderBookResponse { book: OrderBookSnapshot; }
 export interface TradesResponse { trades: Trade[]; }
+export interface SharePriceSeriesResponse { points: SharePricePoint[]; }
+export interface OracleSeriesResponse { snapshots: IndicativeSnapshot[]; }
 export interface UserResponse { snapshot: UserSnapshot; }
+export interface BalanceResponse { balance: Balance; }
 export interface PositionsResponse { positions: Position[]; }
+export interface UserOrdersResponse { orders: CanonicalOrder[]; }
 export interface StartDemoResponse { market: MarketState; }
 export interface DemoScenarioRequest {
   scenario: OracleDemoScenario;

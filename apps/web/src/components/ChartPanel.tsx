@@ -1,43 +1,58 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { createChart, LineSeries, LineStyle } from 'lightweight-charts';
 import type { UTCTimestamp } from 'lightweight-charts';
-import type { UsdCents } from '@jet/shared';
+import type { PriceCents, SharePricePoint } from '@jet/shared';
 import { C, S, panel } from '../theme.js';
-import { formatUsdCents } from '../format.js';
-import type { PricePoint } from '../hooks/usePriceHistory.js';
+import { formatPriceCents } from '../format.js';
 
 interface Props {
-  priceHistory: PricePoint[];
-  thresholdCents: UsdCents;
-  currentPriceCents: UsdCents | null;
+  sharePriceHistory: SharePricePoint[];
+  currentPoint: SharePricePoint | null;
+  bestBid: PriceCents | null;
+  bestAsk: PriceCents | null;
 }
 
-export default function ChartPanel({ priceHistory, thresholdCents, currentPriceCents }: Props) {
+export default function ChartPanel({ sharePriceHistory, currentPoint, bestBid, bestAsk }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const chartRef = useRef<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const seriesRef = useRef<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const priceLineRef = useRef<any>(null);
-  const [showStrike, setShowStrike] = useState(true);
+  const fiftyLineRef = useRef<any>(null);
 
-  // Init chart
   useEffect(() => {
     if (!containerRef.current) return;
     const el = containerRef.current;
     const chart = createChart(el, {
       layout: { background: { color: C.panel }, textColor: C.textDim },
       grid: { vertLines: { color: C.border }, horzLines: { color: C.border } },
-      rightPriceScale: { borderColor: C.border },
+      rightPriceScale: {
+        borderColor: C.border,
+        minimumWidth: 54,
+      },
       timeScale: { borderColor: C.border, timeVisible: true, secondsVisible: true },
       crosshair: { mode: 1 },
       width: el.clientWidth,
-      height: 200,
+      height: 260,
     });
+    chart.priceScale('right').applyOptions({ autoScale: false, scaleMargins: { top: 0.12, bottom: 0.12 } });
     chartRef.current = chart;
-    seriesRef.current = chart.addSeries(LineSeries, { color: C.accent, lineWidth: 2 });
+    const series = chart.addSeries(LineSeries, {
+      color: C.yes,
+      lineWidth: 2,
+      priceFormat: { type: 'price', precision: 0, minMove: 1 },
+    });
+    seriesRef.current = series;
+    fiftyLineRef.current = series.createPriceLine({
+      price: 50,
+      color: C.textMute,
+      lineWidth: 1,
+      lineStyle: LineStyle.Dashed,
+      axisLabelVisible: true,
+      title: '50%',
+    });
 
     const ro = new ResizeObserver(() => {
       chart.applyOptions({ width: el.clientWidth });
@@ -49,71 +64,59 @@ export default function ChartPanel({ priceHistory, thresholdCents, currentPriceC
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
-      priceLineRef.current = null;
+      fiftyLineRef.current = null;
     };
   }, []);
 
-  // Update series data
   useEffect(() => {
     const series = seriesRef.current;
-    if (!series || priceHistory.length === 0) return;
+    if (!series) return;
     const seen = new Map<number, number>();
-    for (const p of priceHistory) {
-      seen.set(Math.floor(p.ts / 1000), p.btcPriceCents / 100);
+    for (const p of sharePriceHistory) {
+      seen.set(Math.floor(p.ts / 1000), p.yesPriceCents as number);
     }
     const data = Array.from(seen.entries())
       .sort((a, b) => a[0] - b[0])
       .map(([time, value]) => ({ time: time as UTCTimestamp, value }));
     series.setData(data);
-  }, [priceHistory]);
+  }, [sharePriceHistory]);
 
-  // Strike price line
-  useEffect(() => {
-    const series = seriesRef.current;
-    if (!series) return;
-    if (priceLineRef.current) {
-      series.removePriceLine(priceLineRef.current);
-      priceLineRef.current = null;
-    }
-    if (showStrike) {
-      priceLineRef.current = series.createPriceLine({
-        price: thresholdCents / 100,
-        color: C.warn,
-        lineWidth: 1,
-        lineStyle: LineStyle.Dashed,
-        axisLabelVisible: true,
-        title: 'STRIKE',
-      });
-    }
-  }, [showStrike, thresholdCents]);
-
-  const deltaVsStrikeBps =
-    currentPriceCents != null
-      ? Math.round(((currentPriceCents - thresholdCents) / thresholdCents) * 10000)
-      : null;
+  const yes = currentPoint?.yesPriceCents ?? null;
+  const no = currentPoint?.noPriceCents ?? null;
+  const source = currentPoint?.source ?? 'mark';
 
   return (
     <div style={{ ...panel, padding: 0, overflow: 'hidden' }}>
       <div style={headerStyle}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: S.sm }}>
-          <span style={{ fontSize: 22, fontWeight: 700, color: C.text }}>
-            {currentPriceCents != null ? formatUsdCents(currentPriceCents) : '—'}
-          </span>
-          {deltaVsStrikeBps != null && (
-            <span style={{ fontSize: 12, color: deltaVsStrikeBps >= 0 ? C.yes : C.no }}>
-              {deltaVsStrikeBps >= 0 ? '+' : ''}
-              {deltaVsStrikeBps} bps vs strike
+        <div style={{ minWidth: 0 }}>
+          <div style={labelStyle}>YES SHARE MARKET PRICE</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: S.sm, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 32, lineHeight: 1, fontWeight: 900, color: C.yes }}>
+              {yes != null ? formatPriceCents(yes) : '--'}
             </span>
-          )}
+            <span style={{ fontSize: 13, color: C.textDim }}>
+              NO {no != null ? formatPriceCents(no) : '--'}
+            </span>
+            <span style={{ fontSize: 11, color: C.textMute, textTransform: 'uppercase' }}>{source}</span>
+          </div>
         </div>
-        <div style={{ fontSize: 10, color: C.textMute, letterSpacing: '0.1em', fontWeight: 700, textTransform: 'uppercase', alignSelf: 'center' }}>
-          BTC / USD · INDICATIVE
+        <div style={quoteBoxStyle}>
+          <Quote label="Bid" value={bestBid} color={C.yes} />
+          <Quote label="Ask" value={bestAsk} color={C.no} />
         </div>
-        <button onClick={() => setShowStrike((s) => !s)} style={toggleBtn}>
-          {showStrike ? 'Hide' : 'Show'} strike
-        </button>
       </div>
       <div ref={containerRef} />
+    </div>
+  );
+}
+
+function Quote({ label, value, color }: { label: string; value: PriceCents | null; color: string }) {
+  return (
+    <div style={{ textAlign: 'right' }}>
+      <div style={{ color: C.textMute, fontSize: 10, fontWeight: 800 }}>{label}</div>
+      <div style={{ color, fontSize: 15, fontWeight: 800 }}>
+        {value != null ? formatPriceCents(value) : '--'}
+      </div>
     </div>
   );
 }
@@ -122,17 +125,22 @@ const headerStyle: CSSProperties = {
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'center',
-  padding: `${S.sm}px ${S.md}px`,
+  gap: S.md,
+  padding: `${S.md}px ${S.md}px`,
   borderBottom: `1px solid ${C.border}`,
 };
 
-const toggleBtn: CSSProperties = {
-  background: 'transparent',
-  border: `1px solid ${C.border}`,
-  borderRadius: 4,
-  color: C.textDim,
-  fontSize: 11,
-  padding: '3px 8px',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
+const labelStyle: CSSProperties = {
+  fontSize: 10,
+  color: C.textMute,
+  letterSpacing: '0.1em',
+  fontWeight: 800,
+  textTransform: 'uppercase',
+  marginBottom: S.xs,
+};
+
+const quoteBoxStyle: CSSProperties = {
+  display: 'flex',
+  gap: S.lg,
+  flexShrink: 0,
 };

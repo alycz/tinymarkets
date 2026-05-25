@@ -25,13 +25,13 @@ export function useOrderBook(
   useEffect(() => {
     if (!lastEvent || !marketId) return;
 
-    if (lastEvent.type === 'book:snapshot' && lastEvent.book.marketId === marketId) {
+    if (lastEvent.type === 'orderbook_snapshot' && lastEvent.book.marketId === marketId) {
       setSnapshot(lastEvent.book);
       seqRef.current = lastEvent.book.seq;
       return;
     }
 
-    if (lastEvent.type === 'book:delta' && lastEvent.delta.marketId === marketId) {
+    if (lastEvent.type === 'orderbook_delta' && lastEvent.delta.marketId === marketId) {
       const delta = lastEvent.delta;
       if (delta.seq !== seqRef.current + 1) {
         send({ type: 'unsubscribe', channels: [bookChannel(marketId)] });

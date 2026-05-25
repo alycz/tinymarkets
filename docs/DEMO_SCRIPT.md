@@ -31,7 +31,7 @@ The market maker quotes both sides of the YES book. The taker process sends nois
 
 ## 3. Show The Trading Loop
 
-1. Observe the server countdown and live BTC indicative price.
+1. Observe the primary YES share-price chart and the separate BTC oracle reference price.
 2. Observe the YES book moving as the market maker quotes.
 3. Place a BUY YES order near the ask.
 4. Place a BUY NO order, or switch action/side to show the YES-book normalization.

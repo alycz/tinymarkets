@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AddressInfo } from 'node:net';
 import WebSocket from 'ws';
 import type { ServerEvent } from '@jet/shared';
-import { oddsPriceCents, shares, userChannel } from '@jet/shared';
+import { oddsPriceCents, shareChannel, shares, userChannel } from '@jet/shared';
 import { buildServer } from '../server.js';
 import { Broadcaster } from '../broadcasts.js';
 import { MarketSession } from '../session.js';
@@ -94,8 +94,8 @@ describe('WebSocket protocol hardening', () => {
       type: 'subscribed',
       channels: [`market:${market.config.marketId}`],
     });
-    expect(await waitForEvent(live, (event) => event.type === 'market:status')).toMatchObject({
-      type: 'market:status',
+    expect(await waitForEvent(live, (event) => event.type === 'market_status')).toMatchObject({
+      type: 'market_status',
       marketId: market.config.marketId,
     });
 
@@ -124,9 +124,39 @@ describe('WebSocket protocol hardening', () => {
       manager.addConnection(ws as unknown as WebSocket);
       manager.subscribe(ws as unknown as WebSocket, [userChannel('userA')]);
 
-      const openOrders = ws.sent.find((event) => event.type === 'user:open_orders');
-      expect(openOrders).toMatchObject({ type: 'user:open_orders', userId: 'userA' });
-      expect(openOrders?.type === 'user:open_orders' && openOrders.openOrders).toHaveLength(1);
+      const openOrders = ws.sent.find((event) => event.type === 'open_order');
+      expect(openOrders).toMatchObject({ type: 'open_order', userId: 'userA' });
+      expect(openOrders?.type === 'open_order' && openOrders.openOrders).toHaveLength(1);
+    } finally {
+      manager.destroy();
+      session.destroy();
+    }
+  });
+
+  it('replays YES share-price points when a share channel subscribes', () => {
+    const session = new MarketSession();
+    const manager = new WsManager({ heartbeatMs: 60_000 });
+    try {
+      manager.setSession(session);
+      const market = session.startDemo();
+      session.placeOrder({
+        userId: 'userA',
+        marketId: market.config.marketId,
+        side: 'YES',
+        action: 'BUY',
+        type: 'LIMIT',
+        oddsPriceCents: oddsPriceCents(55),
+        size: shares(10),
+        tif: 'GTC',
+      });
+
+      const ws = makeFakeWs();
+      manager.addConnection(ws as unknown as WebSocket);
+      manager.subscribe(ws as unknown as WebSocket, [shareChannel(market.config.marketId)]);
+
+      const sharePoint = ws.sent.find((event) => event.type === 'share_price');
+      expect(sharePoint).toMatchObject({ type: 'share_price' });
+      expect(sharePoint?.type === 'share_price' && sharePoint.point.yesPriceCents).toBeGreaterThan(0);
     } finally {
       manager.destroy();
       session.destroy();
@@ -172,8 +202,8 @@ describe('WebSocket protocol hardening', () => {
         userChannel('userA'),
       ]);
 
-      expect(ws.sent.some((event) => event.type === 'market:resolved')).toBe(true);
-      expect(ws.sent.some((event) => event.type === 'user:resolution')).toBe(true);
+      expect(ws.sent.some((event) => event.type === 'resolution')).toBe(true);
+      expect(ws.sent.some((event) => event.type === 'pnl_update')).toBe(true);
     } finally {
       manager.destroy();
       session.destroy();

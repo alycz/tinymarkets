@@ -67,23 +67,26 @@ export function useUser(
   useEffect(() => {
     if (!lastEvent) return;
     switch (lastEvent.type) {
-      case 'user:balance':
+      case 'balance_update':
         if (lastEvent.balance.userId === userId) setBalance(lastEvent.balance);
         break;
-      case 'user:position':
+      case 'position_update':
         if (lastEvent.position.userId === userId && lastEvent.position.marketId === marketId) {
           setPosition(lastEvent.position);
         }
         break;
-      case 'user:open_orders':
+      case 'open_order':
         if (lastEvent.userId === userId) setOpenOrders(lastEvent.openOrders);
         break;
-      case 'user:fill':
+      case 'order_cancelled':
+        if (lastEvent.userId === userId) setOpenOrders(lastEvent.openOrders);
+        break;
+      case 'fill':
         if (lastEvent.fill.userId === userId)
           setRecentFills((prev) => [lastEvent.fill, ...prev].slice(0, 50));
         break;
-      case 'user:resolution':
-        if (lastEvent.marketId === marketId) {
+      case 'pnl_update':
+        if (lastEvent.userId === userId && lastEvent.marketId === marketId) {
           setUserResolution(lastEvent);
         }
         break;

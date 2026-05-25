@@ -10,6 +10,7 @@ import type {
   OrderBookSnapshot,
   Position,
   RampResolution,
+  SharePricePoint,
   Trade,
   UserId,
   UserResolutionEvent,
@@ -28,6 +29,7 @@ type UserPositionCall = { userId: UserId; position: Position };
 type MarketStatusCall = MarketState;
 type MarketResolvedCall = { state: MarketState; resolution: RampResolution };
 type UserResolutionCall = { userId: UserId; event: Omit<UserResolutionEvent, 'type'> };
+type UserOpenOrdersCall = { userId: UserId; openOrders: CanonicalOrder[] };
 
 function makeStubBroadcaster() {
   const bookDeltas: BookDeltaCall[] = [];
@@ -39,16 +41,23 @@ function makeStubBroadcaster() {
   const marketStatuses: MarketStatusCall[] = [];
   const marketResolveds: MarketResolvedCall[] = [];
   const userResolutions: UserResolutionCall[] = [];
+  const userOpenOrders: UserOpenOrdersCall[] = [];
   const oraclePrices: IndicativeSnapshot[] = [];
+  const sharePrices: SharePricePoint[] = [];
+  const marketSnapshots: MarketState[] = [];
 
   const broadcaster = {
     bookDelta(d: OrderBookDelta) { bookDeltas.push(d); },
     bookSnapshot(b: OrderBookSnapshot) { bookSnapshots.push(b); },
     trade(t: Trade) { trades.push(t); },
+    sharePrice(p: SharePricePoint) { sharePrices.push(p); },
     userFill(userId: UserId, fill: Fill) { userFills.push({ userId, fill }); },
     userBalance(userId: UserId, balance: Balance) { userBalances.push({ userId, balance }); },
     userPosition(userId: UserId, position: Position) { userPositions.push({ userId, position }); },
+    userOpenOrders(userId: UserId, openOrders: CanonicalOrder[]) { userOpenOrders.push({ userId, openOrders }); },
+    userOrderCancelled(userId: UserId, _orderId: string, openOrders: CanonicalOrder[]) { userOpenOrders.push({ userId, openOrders }); },
     marketStatus(s: MarketState) { marketStatuses.push(s); },
+    marketSnapshot(s: MarketState) { marketSnapshots.push(s); },
     marketResolved(state: MarketState, resolution: RampResolution) { marketResolveds.push({ state, resolution }); },
     userResolution(userId: UserId, event: Omit<UserResolutionEvent, 'type'>) { userResolutions.push({ userId, event }); },
     oraclePrice(snap: IndicativeSnapshot) { oraclePrices.push(snap); },
@@ -63,9 +72,12 @@ function makeStubBroadcaster() {
     userBalances,
     userPositions,
     marketStatuses,
+    marketSnapshots,
     marketResolveds,
     userResolutions,
+    userOpenOrders,
     oraclePrices,
+    sharePrices,
   };
 }
 
@@ -129,6 +141,7 @@ describe('MarketSession integration', () => {
     expect(stub.trades).toHaveLength(1);
     expect(stub.trades[0]!.yesPriceCents).toBe(60);
     expect(stub.trades[0]!.size).toBe(10);
+    expect(stub.sharePrices.some((p) => p.source === 'trade' && p.yesPriceCents === 60)).toBe(true);
     // 2 fills (one per party)
     expect(stub.userFills).toHaveLength(2);
     const fillUserIds = stub.userFills.map((f) => f.userId);
@@ -143,6 +156,63 @@ describe('MarketSession integration', () => {
     const posB = stub.userPositions.find((p) => p.userId === 'userB')!.position;
     expect(posA.net).toBe(10);
     expect(posB.net).toBe(-10);
+  });
+
+  it('fills all four user-facing order intents through the canonical YES book', () => {
+    const scenarios = [
+      {
+        maker: { userId: 'maker-sell', side: 'YES' as const, action: 'SELL' as const, price: 60 },
+        taker: { userId: 'buy-yes', side: 'YES' as const, action: 'BUY' as const, price: 60 },
+        expectedTakerNet: 10,
+      },
+      {
+        maker: { userId: 'maker-buy', side: 'YES' as const, action: 'BUY' as const, price: 60 },
+        taker: { userId: 'sell-yes', side: 'YES' as const, action: 'SELL' as const, price: 60 },
+        expectedTakerNet: -10,
+      },
+      {
+        maker: { userId: 'maker-buy-2', side: 'YES' as const, action: 'BUY' as const, price: 60 },
+        taker: { userId: 'buy-no', side: 'NO' as const, action: 'BUY' as const, price: 40 },
+        expectedTakerNet: -10,
+      },
+      {
+        maker: { userId: 'maker-sell-2', side: 'YES' as const, action: 'SELL' as const, price: 60 },
+        taker: { userId: 'sell-no', side: 'NO' as const, action: 'SELL' as const, price: 40 },
+        expectedTakerNet: 10,
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      session.startDemo();
+      const marketId = session.getMarketId()!;
+      session.placeOrder({
+        userId: scenario.maker.userId as UserId,
+        marketId,
+        side: scenario.maker.side,
+        action: scenario.maker.action,
+        type: 'LIMIT',
+        oddsPriceCents: oddsPriceCents(scenario.maker.price),
+        size: shares(10),
+        tif: 'GTC',
+      });
+      const result = session.placeOrder({
+        userId: scenario.taker.userId as UserId,
+        marketId,
+        side: scenario.taker.side,
+        action: scenario.taker.action,
+        type: 'LIMIT',
+        oddsPriceCents: oddsPriceCents(scenario.taker.price),
+        size: shares(10),
+        tif: 'IOC',
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error('expected order to fill');
+      expect(result.fills).toHaveLength(1);
+      expect(session.getUserSnapshot(scenario.taker.userId as UserId)!.positions[0]!.net).toBe(scenario.expectedTakerNet);
+      expect(session.getRecentTrades(1)[0]!.yesPriceCents).toBe(60);
+      expect(session.getSharePriceSeries().at(-2)?.source).toBe('trade');
+    }
   });
 
   it('cancel: wrong userId returns NOT_ORDER_OWNER', () => {
@@ -329,7 +399,7 @@ describe('MarketSession integration', () => {
     expect(noEvent.payoutCents).not.toBe(session.getUserSnapshot('noHolder' as UserId)!.balance.availableBalanceCents);
   });
 
-  it('resolution path: emits resolving -> resolved -> market:resolved + user events', async () => {
+  it('resolution path: emits resolving -> resolved -> resolution + user events', async () => {
     vi.useFakeTimers();
 
     // Use a very short duration so we can advance timers
@@ -373,13 +443,13 @@ describe('MarketSession integration', () => {
     expect(resolvingStatus).toBeDefined();
     expect(resolvedStatus).toBeDefined();
 
-    // market:resolved with a RampResolution
+    // resolution with a RampResolution
     expect(stub.marketResolveds).toHaveLength(1);
     expect(stub.marketResolveds[0]!.resolution).toBeDefined();
     expect(stub.marketResolveds[0]!.resolution.method).toBe('RAMP_V1');
     expect(stub.marketResolveds[0]!.resolution.outcome).toMatch(/^(YES|NO)$/);
 
-    // user:resolution for userA and userB (the holders)
+    // pnl_update for userA and userB (the holders)
     expect(stub.userResolutions.length).toBeGreaterThan(0);
     const resolvedUserIds = stub.userResolutions.map((r) => r.userId);
     expect(resolvedUserIds).toContain('userA');

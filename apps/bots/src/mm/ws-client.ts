@@ -62,16 +62,16 @@ export class WsClient {
       }
 
       switch (event.type) {
-        case 'oracle:price':
+        case 'oracle_price':
           this.callbacks.onOracle?.(event);
           break;
-        case 'market:status':
+        case 'market_status':
           this.callbacks.onMarketStatus?.(event);
           break;
-        case 'user:fill':
+        case 'fill':
           this.callbacks.onUserFill?.(event);
           break;
-        case 'market:resolved':
+        case 'resolution':
           this.callbacks.onMarketResolved?.(event);
           break;
       }
