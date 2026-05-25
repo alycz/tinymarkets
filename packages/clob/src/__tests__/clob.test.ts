@@ -30,6 +30,23 @@ function req(
   };
 }
 
+function intentReq(
+  intent: NonNullable<PlaceOrderRequest['intent']>,
+  price: number,
+  size: number,
+  tif: 'GTC' | 'IOC' = 'GTC',
+): PlaceOrderRequest {
+  return {
+    userId: 'u1',
+    marketId: MKT,
+    type: 'LIMIT',
+    intent,
+    price: price as PriceCents,
+    size: size as Shares,
+    tif,
+  };
+}
+
 function makeClob(): Clob {
   return new Clob(MKT, { now: () => 1000, idGen: makeIdGen(1) });
 }
@@ -65,6 +82,29 @@ describe('normalize mapping', () => {
     const o = normalize(req('NO', 'SELL', 40, 10), idGen, 0);
     expect(o.yesAction).toBe('BUY');
     expect(o.yesPriceCents).toBe(60);
+  });
+
+  it('accepts preferred intent/price mapping for all four user intents', () => {
+    expect(normalize(intentReq('BUY_YES', 60, 10), idGen, 0)).toMatchObject({
+      yesAction: 'BUY',
+      yesPriceCents: 60,
+      display: { side: 'YES', action: 'BUY', oddsPriceCents: 60 },
+    });
+    expect(normalize(intentReq('SELL_YES', 60, 10), idGen, 0)).toMatchObject({
+      yesAction: 'SELL',
+      yesPriceCents: 60,
+      display: { side: 'YES', action: 'SELL', oddsPriceCents: 60 },
+    });
+    expect(normalize(intentReq('BUY_NO', 40, 10), idGen, 0)).toMatchObject({
+      yesAction: 'SELL',
+      yesPriceCents: 60,
+      display: { side: 'NO', action: 'BUY', oddsPriceCents: 40 },
+    });
+    expect(normalize(intentReq('SELL_NO', 40, 10), idGen, 0)).toMatchObject({
+      yesAction: 'BUY',
+      yesPriceCents: 60,
+      display: { side: 'NO', action: 'SELL', oddsPriceCents: 40 },
+    });
   });
 
   it('display echoes original side/action/price', () => {
@@ -219,6 +259,19 @@ describe('GTC rests', () => {
     expect(snap.bids).toHaveLength(1);
     expect(snap.bids[0]!.yesPriceCents).toBe(55);
     expect(snap.bids[0]!.size).toBe(20);
+    expect(snap.bids[0]!.orderCount).toBe(1);
+  });
+});
+
+describe('aggregated level orderCount', () => {
+  it('counts resting orders at the same price in snapshots and deltas', () => {
+    const clob = makeClob();
+    clob.placeOrder(req('YES', 'BUY', 55, 20));
+    const { delta } = clob.placeOrder(req('YES', 'BUY', 55, 30));
+
+    const snap = clob.snapshot();
+    expect(snap.bids[0]).toMatchObject({ yesPriceCents: 55, size: 50, orderCount: 2 });
+    expect(delta.changes[0]).toMatchObject({ side: 'BID', yesPriceCents: 55, size: 50, orderCount: 2 });
   });
 });
 

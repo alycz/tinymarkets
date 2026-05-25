@@ -65,10 +65,9 @@ export class TakerBot {
       const req: PlaceOrderRequest = {
         userId: this.persona.userId,
         marketId: this.marketId,
-        side: decision.side,
-        action: decision.action,
+        intent: decision.side === 'YES' ? 'BUY_YES' : 'BUY_NO',
+        price: decision.oddsPriceCents,
         type: 'LIMIT',
-        oddsPriceCents: decision.oddsPriceCents,
         size: decision.size,
         tif: 'IOC',
         clientOrderId: `${this.persona.userId}-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`,
