@@ -20,7 +20,7 @@ export interface ScenarioResult {
 
 const START_CENTS = 10_000_000; // $100,000.00
 const PATH_DURATION_MS = MARKET.durationMs + 60_000; // market + 60s buffer
-const SAMPLE_INTERVAL_MS = 500; // venues produce quotes every 500ms
+const SAMPLE_INTERVAL_MS = 1_000; // venues produce quotes every 1s
 
 export function buildScenario(
   name: ScenarioName,
@@ -29,7 +29,7 @@ export function buildScenario(
 ): ScenarioResult {
   const basePath = makeRandomWalkPath(seed, START_CENTS, PATH_DURATION_MS);
   const expiryMs = marketStartMs + MARKET.durationMs;
-  const windowStart = expiryMs - ORACLE.windowMs; // last 30s
+  const windowStart = expiryMs - ORACLE.windowMs; // final TWAP window
 
   switch (name) {
     case 'HONEST':
@@ -40,10 +40,8 @@ export function buildScenario(
       };
 
     case 'NEAR_EXPIRY_SPIKE': {
-      // Final partition of the settlement window
-      const lastPartitionStart = windowStart + (ORACLE.partitionCount - 1) * ORACLE.partitionSeconds * 1000;
       const adapters = buildHonestVenues(seed, basePath, marketStartMs);
-      // Replace binance with a spiked version (+1500 bps in the last partition)
+      // Replace binance with a spiked version (+1500 bps in the final 5s)
       const spikedBinance = new SimulatedVenue({
         venueId: 'binance',
         quote: 'USDT',
@@ -56,20 +54,20 @@ export function buildScenario(
         marketStartMs,
         basisAdjustmentBps: 5,
         spike: {
-          startMs: lastPartitionStart,
-          durationMs: ORACLE.partitionSeconds * 1000,
+          startMs: expiryMs - 5_000,
+          durationMs: 5_000,
           amplitudeBps: 1_500,
         },
       });
       return {
-        adapters: [...adapters.slice(0, 4), spikedBinance],
+        adapters: [adapters[0]!, spikedBinance, adapters[2]!, adapters[3]!, adapters[4]!],
         seed,
         marketStartMs,
       };
     }
 
     case 'SUBTLE_DISLOCATION': {
-      const dislocationStart = windowStart + 2 * ORACLE.partitionSeconds * 1000;
+      const dislocationStart = windowStart + 5_000;
       const adapters = buildHonestVenues(seed, basePath, marketStartMs);
       const dislocatedBinance = new SimulatedVenue({
         venueId: 'binance',
@@ -84,23 +82,23 @@ export function buildScenario(
         basisAdjustmentBps: 5,
         spike: {
           startMs: dislocationStart,
-          durationMs: 4 * ORACLE.partitionSeconds * 1000,
+          durationMs: 10_000,
           amplitudeBps: 22,
         },
       });
       return {
-        adapters: [...adapters.slice(0, 4), dislocatedBinance],
+        adapters: [adapters[0]!, dislocatedBinance, adapters[2]!, adapters[3]!, adapters[4]!],
         seed,
         marketStartMs,
       };
     }
 
     case 'STALE_VENUE': {
-      // itbit has 5s latency > staleMs (3s)
+      // okx has 5s latency > staleMs (3s)
       const adapters = buildHonestVenues(seed, basePath, marketStartMs);
-      const staleItbit = new SimulatedVenue({
-        venueId: 'itbit',
-        quote: 'USD',
+      const staleOkx = new SimulatedVenue({
+        venueId: 'okx',
+        quote: 'USDT',
         seed: seed ^ 6,
         noiseBps: 4,
         spreadBps: 4,
@@ -108,20 +106,20 @@ export function buildScenario(
         sampleIntervalMs: SAMPLE_INTERVAL_MS,
         basePath,
         marketStartMs,
+        basisAdjustmentBps: 4,
       });
       return {
-        adapters: [...adapters.slice(0, 4), staleItbit],
+        adapters: [adapters[0]!, adapters[1]!, adapters[2]!, staleOkx, adapters[4]!],
         seed,
         marketStartMs,
       };
     }
 
     case 'CROSSED_BOOK': {
-      // lmax has bid >= ask for the last partition
-      const lastPartitionStart = windowStart + (ORACLE.partitionCount - 1) * ORACLE.partitionSeconds * 1000;
+      // bitstamp has bid >= ask for the final 5s
       const adapters = buildHonestVenues(seed, basePath, marketStartMs);
-      const crossedLmax = new SimulatedVenue({
-        venueId: 'lmax',
+      const crossedBitstamp = new SimulatedVenue({
+        venueId: 'bitstamp',
         quote: 'USD',
         seed: seed ^ 7,
         noiseBps: 3,
@@ -131,24 +129,24 @@ export function buildScenario(
         basePath,
         marketStartMs,
         crossedBookAt: {
-          startMs: lastPartitionStart,
-          durationMs: ORACLE.partitionSeconds * 1000,
+          startMs: expiryMs - 5_000,
+          durationMs: 5_000,
         },
       });
       return {
-        adapters: [...adapters.slice(0, 4), crossedLmax],
+        adapters: [adapters[0]!, adapters[1]!, adapters[2]!, adapters[3]!, crossedBitstamp],
         seed,
         marketStartMs,
       };
     }
 
     case 'WIDE_SPREAD': {
-      // gemini has spreadBps: 20 > wideSpreadBps (15)
+      // kraken has spreadBps: 20 > wideSpreadBps (15)
       const adapters = buildHonestVenues(seed, basePath, marketStartMs);
-      const wideGemini = new SimulatedVenue({
-        venueId: 'gemini',
+      const wideKraken = new SimulatedVenue({
+        venueId: 'kraken',
         quote: 'USD',
-        seed: seed ^ 4,
+        seed: seed ^ 2,
         noiseBps: 3,
         spreadBps: 20, // > ORACLE.wideSpreadBps (15)
         latencyMs: 100,
@@ -157,7 +155,7 @@ export function buildScenario(
         marketStartMs,
       });
       return {
-        adapters: [adapters[0]!, adapters[1]!, adapters[2]!, wideGemini, adapters[4]!],
+        adapters: [adapters[0]!, adapters[1]!, wideKraken, adapters[3]!, adapters[4]!],
         seed,
         marketStartMs,
       };
@@ -183,6 +181,18 @@ function buildHonestVenues(
       marketStartMs,
     }),
     new SimulatedVenue({
+      venueId: 'binance',
+      quote: 'USDT',
+      seed: seed ^ 5,
+      noiseBps: 4,
+      spreadBps: 3,
+      latencyMs: 150,
+      sampleIntervalMs: SAMPLE_INTERVAL_MS,
+      basePath,
+      marketStartMs,
+      basisAdjustmentBps: 5,
+    }),
+    new SimulatedVenue({
       venueId: 'kraken',
       quote: 'USD',
       seed: seed ^ 2,
@@ -194,6 +204,18 @@ function buildHonestVenues(
       marketStartMs,
     }),
     new SimulatedVenue({
+      venueId: 'okx',
+      quote: 'USDT',
+      seed: seed ^ 4,
+      noiseBps: 4,
+      spreadBps: 3,
+      latencyMs: 100,
+      sampleIntervalMs: SAMPLE_INTERVAL_MS,
+      basePath,
+      marketStartMs,
+      basisAdjustmentBps: 4,
+    }),
+    new SimulatedVenue({
       venueId: 'bitstamp',
       quote: 'USD',
       seed: seed ^ 3,
@@ -203,29 +225,6 @@ function buildHonestVenues(
       sampleIntervalMs: SAMPLE_INTERVAL_MS,
       basePath,
       marketStartMs,
-    }),
-    new SimulatedVenue({
-      venueId: 'gemini',
-      quote: 'USD',
-      seed: seed ^ 4,
-      noiseBps: 3,
-      spreadBps: 3,
-      latencyMs: 100,
-      sampleIntervalMs: SAMPLE_INTERVAL_MS,
-      basePath,
-      marketStartMs,
-    }),
-    new SimulatedVenue({
-      venueId: 'binance',
-      quote: 'USDT',
-      seed: seed ^ 5,
-      noiseBps: 4,
-      spreadBps: 3,
-      latencyMs: 150,
-      sampleIntervalMs: SAMPLE_INTERVAL_MS,
-      basePath,
-      marketStartMs,
-      basisAdjustmentBps: 5,
     }),
   ];
 }

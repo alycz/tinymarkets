@@ -1,4 +1,4 @@
-import type { IndicativeSnapshot, RampResolution } from './oracle';
+import type { IndicativeSnapshot, VenueWeightedTwapResolution } from './oracle';
 import type { OrderBookDelta, OrderBookSnapshot } from './orderbook';
 import type { CanonicalOrder } from './orders';
 import type { SharePricePoint } from './share-price';
@@ -69,8 +69,8 @@ export interface SharePriceEvent { type: 'share_price'; point: SharePricePoint; 
 export interface BookSnapshotEvent { type: 'orderbook_snapshot'; book: OrderBookSnapshot; }
 export interface BookDeltaEvent { type: 'orderbook_delta'; delta: OrderBookDelta; }
 export interface TradeCreatedEvent { type: 'trade'; trade: Trade; }
-/** Public, auditable resolution: the full RAMP_V1 object for the transparency panel. */
-export interface MarketResolvedEvent { type: 'resolution'; resolution: RampResolution; }
+/** Public, auditable resolution: the full VENUE_WEIGHTED_TWAP_V1 object for the transparency panel. */
+export interface MarketResolvedEvent { type: 'resolution'; resolution: VenueWeightedTwapResolution; }
 
 // ---- server -> client: user-specific --------------------------------------
 

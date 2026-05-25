@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "RAMP_V1 methodology + venue adapters / simulated feeds.",
+  "description": "VENUE_WEIGHTED_TWAP_V1 methodology + venue adapters / simulated feeds.",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {

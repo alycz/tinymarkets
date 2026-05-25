@@ -4,7 +4,7 @@ A local TypeScript demo of a 2-minute BTC binary prediction market:
 
 > Will BTC/USD be above $100,000 in 2 minutes?
 
-Users can start a market, trade YES or NO limit orders, watch a live order book and trades feed, and see the market resolve through the deterministic `RAMP_V1` oracle. Everything is local and simulated: no real funds, wallets, signatures, live exchange accounts, database, or on-chain settlement.
+Users can start a market, trade YES or NO limit orders, watch a live order book and trades feed, and see the market resolve through the deterministic `VENUE_WEIGHTED_TWAP_V1` oracle. Everything is local and simulated: no real funds, wallets, signatures, live exchange accounts, database, or on-chain settlement.
 
 ## Reviewer Quickstart
 
@@ -22,7 +22,7 @@ Then:
 3. In another terminal, run `pnpm dev:bots`.
 4. Place a YES or NO order.
 5. Click `Arm Spike Demo` or `Arm Subtle Demo` before expiry.
-6. Watch resolution, payout, PnL, sources used/excluded, source usage, and input hash.
+6. Watch resolution, payout, PnL, sources used/excluded, per-venue weights, and input hash.
 
 For a single command after install, use:
 
@@ -38,7 +38,7 @@ pnpm demo
 - Fastify REST API plus WebSocket server at `/ws`.
 - One canonical YES CLOB with price-time priority, GTC/IOC limit orders, partial fills, cancel, snapshots, deltas, and recent trades.
 - Signed-position ledger: positive net is long YES, negative net is long NO.
-- Deterministic simulated `RAMP_V1` oracle with venue health, final-window partitioning, median aggregation, outlier rejection, full resolution payload, and input hash.
+- Deterministic simulated `VENUE_WEIGHTED_TWAP_V1` oracle with venue health, a final 15-second multi-venue mid-price TWAP, static venue weights, stale/outlier rejection, full resolution payload, and input hash.
 - Market maker bot plus noisy taker bots for local liquidity.
 
 ## Local Commands
@@ -66,7 +66,7 @@ See `docs/DEMO_SCRIPT.md` for the intended reviewer walkthrough. The short versi
 3. Place a BUY YES or BUY NO order.
 4. Start bots if they are not already running.
 5. Arm the spike or subtle dislocation demo.
-6. During the final 30 seconds, inspect forming `RAMP_V1` partitions.
+6. During the final 15 seconds, inspect the forming `VENUE_WEIGHTED_TWAP_V1` window.
 7. At resolution, inspect final price, outcome, used/excluded sources, input hash, payout, and PnL.
 
 ## Manipulation Demo
@@ -80,7 +80,7 @@ POST /markets/:marketId/oracle/demo
 
 The legacy `POST /markets/:marketId/oracle/demo-spike` route remains available as a wrapper for `NEAR_EXPIRY_SPIKE`.
 
-The demo switches the deterministic simulated venue set to a one-venue stress scenario. At resolution, the `RAMP_V1` panel shows final partitions, quality flags, sources used, source usage, sources excluded, confidence, dispersion state, and input hash. It demonstrates resistance to these single simulated venue stresses, not impossibility of manipulation.
+The demo switches the deterministic simulated venue set to a one-venue stress scenario. At resolution, the `VENUE_WEIGHTED_TWAP_V1` panel shows per-venue TWAPs, normalized weights, quality flags, sources used/excluded, confidence, dispersion state, and input hash. It demonstrates resistance to these single simulated venue stresses, not impossibility of manipulation.
 
 ## Checks
 
@@ -114,7 +114,7 @@ packages/
   config/       Tunable market and oracle constants
   clob/         In-memory YES order book and matching
   market-core/  Signed positions, collateral, settlement
-  oracle/       RAMP_V1 methodology and simulated venues
+  oracle/       VENUE_WEIGHTED_TWAP_V1 methodology and simulated venues
 docs/
   DESIGN.md                 Technical design writeup
   DEMO_SCRIPT.md            Reviewer walkthrough

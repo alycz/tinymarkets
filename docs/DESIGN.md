@@ -1,6 +1,6 @@
 # Design Document
 
-This app is a local 2-minute BTC binary prediction market demo. The important choices are the single canonical YES book, the signed-position ledger, server-authoritative realtime state, and the `RAMP_V1` oracle.
+This app is a local 2-minute BTC binary prediction market demo. The important choices are the single canonical YES book, the signed-position ledger, server-authoritative realtime state, and the `VENUE_WEIGHTED_TWAP_V1` oracle.
 
 ## 1. Product / Demo Overview
 
@@ -8,7 +8,7 @@ The product is a single local market:
 
 > Will BTC/USD be above $100,000 in 2 minutes?
 
-From the web app, a user can start a demo market, watch the server countdown, place YES or NO limit orders, see balances and signed positions update, follow the live order book and trades feed, and view the final resolution and personal PnL. The UI also exposes the oracle method, venue health, dispersion, confidence, forming final-window partitions, final sources used/excluded, and the replay input hash.
+From the web app, a user can start a demo market, watch the server countdown, place YES or NO limit orders, see balances and signed positions update, follow the live order book and trades feed, and view the final resolution and personal PnL. The UI also exposes the oracle method, venue health, dispersion, confidence, forming final-window TWAP, final sources used/excluded, per-venue weights, and the replay input hash.
 
 The app runs locally with:
 
@@ -30,7 +30,7 @@ What is real:
 - The REST and WebSocket server.
 - The in-memory CLOB and matching logic.
 - The signed-position ledger and four fill classifications.
-- The RAMP_V1 calculation over deterministic simulated venue quotes.
+- The VENUE_WEIGHTED_TWAP_V1 calculation over deterministic simulated venue quotes.
 - The browser UI, WebSocket subscriptions, order entry, and settlement display.
 
 What is simulated:
@@ -43,7 +43,7 @@ What is simulated:
 
 `DEMO_MODE=live` and `DEMO_MODE=hybrid` are accepted for future compatibility, but currently retain deterministic simulated venues so the demo remains reliable. Real live exchange adapters are production/future work.
 
-The manipulation demo is also simulated. The oracle controls can arm either a near-expiry single-venue spike or a subtler single-venue dislocation. The point is to show that this implementation resists those one-venue stresses through median aggregation, partitioning, and outlier exclusion. It is not a claim that manipulation is impossible.
+The manipulation demo is also simulated. The oracle controls can arm either a near-expiry single-venue spike or a subtler single-venue dislocation. The point is to show that this implementation resists those one-venue stresses through multi-venue aggregation, final-window TWAP, static weight normalization, and outlier exclusion. It is not a claim that manipulation is impossible.
 
 ## 2. System Architecture
 
@@ -59,7 +59,7 @@ packages/
   config/       Tunable constants
   clob/         In-memory YES order book and matching
   market-core/  Signed positions, collateral accounting, settlement
-  oracle/       RAMP_V1 and deterministic simulated venue adapters
+  oracle/       VENUE_WEIGHTED_TWAP_V1 and deterministic simulated venue adapters
 ```
 
 `@jet/shared` is the contract spine. Domain types, REST response shapes, WebSocket events, branded integer units, orders, trades, positions, and oracle payloads are defined there and imported by every other package.
@@ -208,9 +208,9 @@ What is fake:
 - The taker personas use `Math.random`, so their behavior is organic but not replayable.
 - The market maker does not model adverse selection beyond a simple probability curve.
 
-## 7. Oracle Design - RAMP_V1
+## 7. Oracle Design - VENUE_WEIGHTED_TWAP_V1
 
-`RAMP_V1` means Robust Adaptive Multi-venue Price oracle. It treats settlement as a short-duration benchmark problem, not a lookup of one price tick.
+`VENUE_WEIGHTED_TWAP_V1` treats settlement as a short-duration benchmark problem, not a lookup of one price tick. BTC/USD is the oracle input; the YES/NO share price is the traded market price and never determines settlement.
 
 ### Why Naive Settlement Fails
 
@@ -230,49 +230,44 @@ Long EMA smoothing solves the opposite problem. It dampens momentary spikes, but
 
 ### Methodology
 
-The final settlement window is the last 30 seconds before expiry, split into six 5-second partitions. Within each partition, each venue contributes a mid-price TWAP:
+The final settlement window is the last 15 seconds before expiry. Each venue contributes one mid-price TWAP over that window:
 
 ```text
 mid = floor((bestBid + bestAsk) / 2)
 ```
 
-The implementation uses stair-step TWAP. A quote at or before the partition start fills from the start, then new quotes update the integral until partition end.
+The implementation uses stair-step TWAP. A quote at or before the window start fills from the start, then new quotes update the integral until expiry.
 
 The demo's deterministic venue set currently includes:
 
-- USD venues: `coinbase`, `kraken`, `bitstamp`, `gemini`
-- USDT venue: `binance`, with a static basis adjustment in the simulator
+- USD venues: `coinbase`, `kraken`, `bitstamp`
+- USDT venues: `binance`, `okx`, with static basis adjustments in the simulator
 
-The type system and config also name more intended USD/USDT venues, but the built scenario uses five simulated venues. USD-first matters because the contract question is BTC/USD. A USDT venue carries basis risk: BTC/USDT can diverge from BTC/USD during a USDT dislocation. In this demo, the USDT venue is basis-adjusted and its quote currency is shown in the oracle panel; production should treat USDT sources more carefully than direct USD venues.
+The configured static weights are Coinbase 30%, Binance 30%, Kraken 20%, OKX 10%, and Bitstamp 10%. USD-first matters because the contract question is BTC/USD. USDT venues carry basis risk: BTC/USDT can diverge from BTC/USD during a USDT dislocation. In this demo, USDT venues are basis-adjusted and their quote currency is shown in the oracle panel; production should treat USDT sources more carefully than direct USD venues.
 
-For each 5-second partition:
+Final resolution:
 
-1. Compute each venue's mid-price TWAP.
-2. Exclude unhealthy venues.
-3. Compute the equal-weight median of surviving venue TWAPs.
+1. Compute each venue's final-window mid-price TWAP.
+2. Exclude missing, stale, crossed-book, and wide-spread venues.
+3. Compute the median of remaining venue TWAPs.
+4. Exclude any venue deviating by more than `max(25 bps, $100)` from that median.
+5. Normalize the static weights over survivors.
+6. Compute the weighted mean of surviving venue TWAPs.
+7. Round to cents and compare against the threshold.
 
-Across the six partitions:
-
-1. Collect the six partition prices.
-2. Use the median of those partition prices as the final resolution price.
-
-The median across partitions is deliberate. CME-style reference rates often use means because they are measuring an average traded price over a window. This app is doing binary threshold classification under adversarial timing. A mean gives every spiked partition linear influence. A median requires an attacker to move a majority of the partition prices, not only a late tail of the window.
-
-The tests include a case where two high final partitions flip a mean above the threshold while the median remains below it. That is the intended divergence from a mean-based benchmark.
+The live displayed BTC/oracle price uses the same methodology family but on latest venue mids: health gates, outlier rejection, static weight normalization, and a weighted aggregate. It is only an indicative reference. Final settlement uses the expiry-anchored 15-second TWAP.
 
 ### Exclusions
 
 A venue can be excluded for:
 
-- `MISSING`: no quote touching the partition.
-- `STALE`: latest observable quote at partition end is older than `ORACLE.staleMs`, currently 3 seconds.
+- `MISSING`: no quote touching the final window.
+- `STALE`: latest observable quote at window end is older than `ORACLE.staleMs`, currently 3 seconds.
 - `CROSSED_BOOK`: bid is greater than or equal to ask.
 - `WIDE_SPREAD`: spread TWAP exceeds `ORACLE.wideSpreadBps`, currently 15 bps.
-- `OUTLIER`: deviation from the cross-venue median exceeds `max(10 bps, 3 * MAD)`.
+- `OUTLIER`: deviation from the cross-venue median exceeds `max(25 bps, $100)`.
 
-MAD is median absolute deviation among candidate venue TWAPs. Using MAD makes the outlier rule adapt to current cross-venue dispersion instead of relying only on a fixed band.
-
-The config requires at least three valid venues. In the demo implementation, a partition with too few valid venues is still priced from available data by the strict deterministic rule, but the window-level resolution is marked `DISLOCATED` and includes the `INSUFFICIENT_VALID_VENUES` quality flag. That is intentional surfacing, not silent acceptance. Production should decide whether that state extends the window, pauses settlement, triggers a refund, or opens a dispute path.
+The config requires at least two valid venues. If fewer than two venues survive, the demo uses a deterministic simulated aggregate fallback from available TWAPs and marks `FALLBACK_SIMULATED_AGGREGATE`, `INSUFFICIENT_VALID_VENUES`, and `DISLOCATED` quality. That is intentional surfacing, not silent acceptance. Production should decide whether that state extends the window, pauses settlement, triggers a refund, or opens a dispute path.
 
 ### Dispersion, Confidence, And Circuit Breaker
 
@@ -293,7 +288,7 @@ STRESSED   >= 12 bps
 DISLOCATED >= 25 bps
 ```
 
-`confidenceBps` is output-only. It is not an aggregation weight. That is important: a weighted scheme is gameable if an attacker can make a controlled venue look tight, fast, and "confident" to buy extra influence. A median cannot be bought that way. A venue either survives inclusion checks and gets one vote in the ordering, or it is excluded.
+`confidenceBps` is output-only. It is not an aggregation weight. Venue influence comes only from the documented static weights, which are normalized after exclusions and included in the final resolution payload.
 
 The confidence label is:
 
@@ -323,31 +318,46 @@ Resolution is built by a pure function over:
 - settlement timestamp,
 - oracle config.
 
-The output is a full `RampResolution` object:
+The output is a full `VenueWeightedTwapResolution` object. It includes the required methodology shape:
+
+```json
+{
+  "market_id": "btc-above-100000",
+  "expiry_ts": 1710000000,
+  "threshold": 100000,
+  "resolution_price": 100123.42,
+  "outcome": "YES",
+  "method": "VENUE_WEIGHTED_TWAP_V1",
+  "sources_used": ["coinbase", "binance", "kraken"],
+  "sources_excluded": [{ "venue": "okx", "reason": "STALE" }]
+}
+```
+
+The app also carries audit/display fields:
 
 - method and rule version,
 - threshold and expiry timestamp,
 - window definition,
-- partition prices and venue counts,
+- per-venue final-window TWAPs,
+- static weights and normalized weights,
 - resolution price and outcome,
 - confidence and dispersion state,
 - quality flags,
 - sources used,
-- per-source partition usage,
 - sources excluded with reasons and outlier deviations,
 - `inputHash`.
 
-`sourcesUsed` means a venue survived at least one final-window partition. `sourceUsage` gives the partition count detail: how many of the six partitions each venue contributed to and how many excluded it.
+`sourcesUsed` means a venue contributed to the final weighted TWAP. `sourcesExcluded` records every venue removed by health or outlier checks.
 
 `inputHash` is a SHA-256 hash of canonical resolution-affecting inputs. It covers every sample fetched for settlement replay, including the stale lead-in interval from `windowStart - staleMs` through `windowEnd`, plus venue IDs and quote currencies, market ID, threshold, expiry timestamp, rule version, oracle config values, and the effective aggregation method. Samples and metadata are sorted before hashing so adapter/sample ordering does not change the hash.
 
 ### Manipulation Demo
 
-The `NEAR_EXPIRY_SPIKE` scenario replaces the simulated Binance adapter with one that spikes +1500 bps in the last 5-second partition. The oracle tests assert that Binance is excluded as an outlier and that the outcome matches the honest baseline for that scenario.
+The `NEAR_EXPIRY_SPIKE` scenario replaces the simulated Binance adapter with one that spikes +1500 bps in the final 5 seconds. The oracle tests assert that Binance is excluded as an outlier and that the outcome remains driven by surviving venue consensus.
 
-The `SUBTLE_DISLOCATION` scenario moves one venue roughly 20 bps near expiry across multiple final-window partitions. It is meant to show a less cartoonish stress case: one venue can create visible dispersion or outlier exclusions, but the final median-of-partitions result remains deterministic and does not flip against the honest venue consensus.
+The `SUBTLE_DISLOCATION` scenario moves one venue roughly 20 bps near expiry across the final window. It is meant to show a less cartoonish stress case: one venue can create visible dispersion or outlier exclusions, but the final cleaned weighted TWAP remains deterministic and auditable.
 
-The web controls call `POST /markets/:marketId/oracle/demo` with either `NEAR_EXPIRY_SPIKE` or `SUBTLE_DISLOCATION`. The legacy `POST /markets/:marketId/oracle/demo-spike` route remains as a compatibility wrapper for the spike scenario. The response type allows an optional `attackCostEstimate`, and the UI can display one, but the current API path does not populate that estimate. The built demo is therefore about venue exclusion, partitioning, and replay transparency, not a measured or simulated liquidity-cost calculation.
+The web controls call `POST /markets/:marketId/oracle/demo` with either `NEAR_EXPIRY_SPIKE` or `SUBTLE_DISLOCATION`. The legacy `POST /markets/:marketId/oracle/demo-spike` route remains as a compatibility wrapper for the spike scenario. The response type allows an optional `attackCostEstimate`, and the UI can display one, but the current API path does not populate that estimate. The built demo is therefore about venue exclusion, weight normalization, final-window TWAP, and replay transparency, not a measured or simulated liquidity-cost calculation.
 
 ### Production Improvements
 
@@ -364,9 +374,9 @@ The frontend is a single dense market page rather than a landing page. It priori
 - Account panel with available cash, reserved order funds, OI collateral share, position, average entry, and unrealized PnL.
 - YES book ladder showing YES and complementary NO prices.
 - Recent trades with side, price, size, and fill kind.
-- Oracle panel with method, final-window countdown, live indicative price, dispersion, confidence, venue health, forming resolution partitions, final resolution, quality flags, sources used/excluded, source usage, input hash, and user PnL.
+- Oracle panel with method, final-window countdown, live indicative price, dispersion, confidence, venue health, forming weighted TWAP, final resolution, quality flags, sources used/excluded, per-venue TWAPs, normalized weights, input hash, and user PnL.
 
-The primary chart's live price is the traded YES share price, not BTC/USD. The BTC/USD reference chart and oracle panel are separate because BTC is the underlying oracle input, while YES shares are the market being traded. During the final 30 seconds, the oracle snapshot can include `formingResolution`, and the panel shows the forming partition median separately; final settlement still uses the final-window benchmark, not the share chart.
+The primary chart's live price is the traded YES share price, not BTC/USD. The BTC/USD reference chart and oracle panel are separate because BTC is the underlying oracle input, while YES shares are the market being traded. During the final 15 seconds, the oracle snapshot can include `formingResolution`, and the panel shows the forming weighted TWAP separately; final settlement still uses the final-window benchmark, not the share chart.
 
 The main tradeoff is simplicity. The UI shows the real mechanics that exist, but avoids features the backend does not support: deposits, auth, wallet connection, persistence, fees, and production risk limits.
 

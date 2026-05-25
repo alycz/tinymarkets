@@ -2,16 +2,16 @@ import { MARKET } from '@jet/config';
 import {
   type MarketState,
   type MarketConfig,
-  type RampResolution,
   type MarketId,
+  type VenueWeightedTwapResolution,
   usdCents,
   shares,
   timestampMs,
 } from '@jet/shared';
-import { RampOracle } from '@jet/oracle';
+import { VenueWeightedTwapOracle } from '@jet/oracle';
 
 type TickCallback = (state: MarketState) => void;
-type ResolvedCallback = (state: MarketState, resolution: RampResolution) => void;
+type ResolvedCallback = (state: MarketState, resolution: VenueWeightedTwapResolution) => void;
 
 export class MarketMachine {
   private state: MarketState | null = null;
@@ -20,7 +20,7 @@ export class MarketMachine {
   private tickCallbacks: TickCallback[] = [];
   private resolvedCallbacks: ResolvedCallback[] = [];
 
-  constructor(private oracle: RampOracle) {}
+  constructor(private oracle: VenueWeightedTwapOracle) {}
 
   onTick(cb: TickCallback): void {
     this.tickCallbacks.push(cb);
@@ -58,7 +58,7 @@ export class MarketMachine {
       openInterest: shares(0),
     };
 
-    this.oracle.start(marketId);
+    this.oracle.start(marketId, config, expiry);
     this.tickInterval = setInterval(() => this.tick(), 1000);
 
     return this.state;

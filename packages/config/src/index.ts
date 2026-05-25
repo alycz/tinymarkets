@@ -12,26 +12,29 @@ export const MARKET = {
 } as const;
 
 export const ORACLE = {
-  method: 'RAMP_V1',
-  ruleVersion: 'ramp-v1.0.0',
+  method: 'VENUE_WEIGHTED_TWAP_V1',
+  ruleVersion: 'venue-weighted-twap-v1.0.0',
   /** live indicative feed refresh */
   sampleIntervalMs: 1_000,
-  /** final settlement window: last 30s ... */
-  windowMs: 30_000,
-  /** ... split into six 5s partitions */
-  partitionCount: 6,
-  partitionSeconds: 5,
+  /** final settlement window: last 15s */
+  windowMs: 15_000,
   /** within-venue input + aggregation (locked decisions) */
   venueInput: 'mid_price_twap',
-  venueAggregation: 'median',
-  partitionAggregation: 'median', // default; 'mean' / 'trimmed_mean' available for comparison
+  venueAggregation: 'weighted_mean_after_outlier_rejection',
   /** venue exclusion thresholds */
   staleMs: 3_000,
   wideSpreadBps: 15,
-  /** outlier rule: exclude beyond max(floor, madMultiple * MAD) bps from cross-venue median */
-  outlierBpsFloor: 10,
-  madMultiple: 3,
-  minVenues: 3,
+  /** outlier rule: exclude beyond max(25bps, $100) from cross-venue median */
+  outlierBpsFloor: 25,
+  outlierUsdCentsFloor: 10_000,
+  minVenues: 2,
+  weights: {
+    coinbase: 0.30,
+    binance: 0.30,
+    kraken: 0.20,
+    okx: 0.10,
+    bitstamp: 0.10,
+  },
   /** dispersion regime thresholds (bps), anchored to observed data */
   dispersion: { elevatedBps: 5, stressedBps: 12, dislocatedBps: 25 },
 } as const;

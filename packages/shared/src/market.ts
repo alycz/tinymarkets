@@ -1,4 +1,4 @@
-import type { RampResolution } from './oracle';
+import type { VenueWeightedTwapResolution } from './oracle';
 import type { MarketId, Shares, TimestampMs, UsdCents } from './units';
 
 export type MarketStatus =
@@ -26,5 +26,5 @@ export interface MarketState {
   /** total YES contracts outstanding */
   openInterest: Shares;
   /** present once status === 'resolved' */
-  resolution?: RampResolution;
+  resolution?: VenueWeightedTwapResolution;
 }

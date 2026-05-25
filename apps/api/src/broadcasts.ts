@@ -6,13 +6,13 @@ import type {
   OrderBookDelta,
   OrderBookSnapshot,
   Position,
-  RampResolution,
   SharePricePoint,
   Trade,
   CanonicalOrder,
   OrderId,
   UserId,
   UserResolutionEvent,
+  VenueWeightedTwapResolution,
 } from '@jet/shared';
 import {
   bookChannel,
@@ -37,7 +37,7 @@ export class Broadcaster {
     this.mgr.broadcast(marketChannel(s.config.marketId), makeMarketSnapshotEvent(s));
   }
 
-  marketResolved(s: MarketState, r: RampResolution): void {
+  marketResolved(s: MarketState, r: VenueWeightedTwapResolution): void {
     this.mgr.broadcast(marketChannel(s.config.marketId), {
       type: 'resolution',
       resolution: r,

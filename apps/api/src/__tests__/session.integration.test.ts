@@ -9,11 +9,11 @@ import type {
   OrderBookDelta,
   OrderBookSnapshot,
   Position,
-  RampResolution,
   SharePricePoint,
   Trade,
   UserId,
   UserResolutionEvent,
+  VenueWeightedTwapResolution,
 } from '@jet/shared';
 import { oddsPriceCents, PAYOUT_CENTS, shares } from '@jet/shared';
 import { MarketSession } from '../session.js';
@@ -27,7 +27,7 @@ type UserFillCall = { userId: UserId; fill: Fill };
 type UserBalanceCall = { userId: UserId; balance: Balance };
 type UserPositionCall = { userId: UserId; position: Position };
 type MarketStatusCall = MarketState;
-type MarketResolvedCall = { state: MarketState; resolution: RampResolution };
+type MarketResolvedCall = { state: MarketState; resolution: VenueWeightedTwapResolution };
 type UserResolutionCall = { userId: UserId; event: Omit<UserResolutionEvent, 'type'> };
 type UserOpenOrdersCall = { userId: UserId; openOrders: CanonicalOrder[] };
 
@@ -58,7 +58,7 @@ function makeStubBroadcaster() {
     userOrderCancelled(userId: UserId, _orderId: string, openOrders: CanonicalOrder[]) { userOpenOrders.push({ userId, openOrders }); },
     marketStatus(s: MarketState) { marketStatuses.push(s); },
     marketSnapshot(s: MarketState) { marketSnapshots.push(s); },
-    marketResolved(state: MarketState, resolution: RampResolution) { marketResolveds.push({ state, resolution }); },
+    marketResolved(state: MarketState, resolution: VenueWeightedTwapResolution) { marketResolveds.push({ state, resolution }); },
     userResolution(userId: UserId, event: Omit<UserResolutionEvent, 'type'>) { userResolutions.push({ userId, event }); },
     oraclePrice(snap: IndicativeSnapshot) { oraclePrices.push(snap); },
   };
@@ -443,10 +443,10 @@ describe('MarketSession integration', () => {
     expect(resolvingStatus).toBeDefined();
     expect(resolvedStatus).toBeDefined();
 
-    // resolution with a RampResolution
+    // resolution with a VenueWeightedTwapResolution
     expect(stub.marketResolveds).toHaveLength(1);
     expect(stub.marketResolveds[0]!.resolution).toBeDefined();
-    expect(stub.marketResolveds[0]!.resolution.method).toBe('RAMP_V1');
+    expect(stub.marketResolveds[0]!.resolution.method).toBe('VENUE_WEIGHTED_TWAP_V1');
     expect(stub.marketResolveds[0]!.resolution.outcome).toMatch(/^(YES|NO)$/);
 
     // pnl_update for userA and userB (the holders)

@@ -1,8 +1,8 @@
-import type { MarketStatus, RampResolution } from '@jet/shared';
+import type { MarketStatus, VenueWeightedTwapResolution } from '@jet/shared';
 
 interface Props {
   status: MarketStatus;
-  resolution: RampResolution | null;
+  resolution: VenueWeightedTwapResolution | null;
 }
 
 const STYLES: Record<MarketStatus, { background: string; color: string }> = {

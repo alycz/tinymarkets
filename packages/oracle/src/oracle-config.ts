@@ -1,20 +1,18 @@
-export type PartitionAggregation = 'median' | 'mean' | 'trimmed_mean';
+import type { VenueId } from '@jet/shared';
 
 export interface OracleConfig {
   method: string;
   ruleVersion: string;
   sampleIntervalMs: number;
   windowMs: number;
-  partitionCount: number;
-  partitionSeconds: number;
   venueInput: 'mid_price_twap';
-  venueAggregation: 'median';
-  partitionAggregation: PartitionAggregation;
+  venueAggregation: 'weighted_mean_after_outlier_rejection';
   staleMs: number;
   wideSpreadBps: number;
   outlierBpsFloor: number;
-  madMultiple: number;
+  outlierUsdCentsFloor: number;
   minVenues: number;
+  weights: Partial<Record<VenueId, number>>;
   dispersion: {
     elevatedBps: number;
     stressedBps: number;

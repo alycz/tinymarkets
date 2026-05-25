@@ -21,12 +21,12 @@ Run this before handing off the repo.
 - Trades, fills, balance, reserved funds, signed position, and PnL update.
 - `Arm Spike Demo` works.
 - `Arm Subtle Demo` works.
-- Final resolution shows outcome, reference price, payout, realized PnL, sources used/excluded, source usage, quality flags, and input hash.
+- Final resolution shows outcome, reference price, payout, realized PnL, sources used/excluded, per-venue TWAPs, normalized weights, quality flags, and input hash.
 
 ## Documentation Verification
 
 - `README.md` gives a clear reviewer quickstart.
 - `docs/DEMO_SCRIPT.md` describes the intended click path.
-- `docs/DESIGN.md` explains `RAMP_V1` deeply and matches the code.
+- `docs/DESIGN.md` explains `VENUE_WEIGHTED_TWAP_V1` deeply and matches the code.
 - `DEPLOY.md` separates hosted env requirements from local defaults.
 - Known simplifications are explicit and framed as local-demo tradeoffs.

@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import type { MarketStatus, RampResolution, UsdCents } from '@jet/shared';
+import type { MarketStatus, VenueWeightedTwapResolution, UsdCents } from '@jet/shared';
 import { C, S } from '../theme.js';
 import { formatUsdCents } from '../format.js';
 import StatusBadge from './StatusBadge.js';
@@ -12,7 +12,7 @@ interface Props {
   marketStatus: MarketStatus;
   msRemaining: number;
   wsStatus: WsStatus;
-  resolution: RampResolution | null;
+  resolution: VenueWeightedTwapResolution | null;
 }
 
 export default function MarketHeader({
