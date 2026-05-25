@@ -137,16 +137,22 @@ export class OrderBook {
     return this.levels(side).find(l => l.yesPriceCents === price)?.size ?? 0;
   }
 
+  getLevelOrderCount(side: 'BUY' | 'SELL', price: PriceCents): number {
+    return this.levels(side).find(l => l.yesPriceCents === price)?.orders.length ?? 0;
+  }
+
   snapshot(marketId: string, seq: number, ts: number): OrderBookSnapshot {
     return {
       marketId,
       bids: this.bids.map(l => ({
         yesPriceCents: l.yesPriceCents,
         size: shares(l.size),
+        orderCount: l.orders.length,
       })),
       asks: this.asks.map(l => ({
         yesPriceCents: l.yesPriceCents,
         size: shares(l.size),
+        orderCount: l.orders.length,
       })),
       seq,
       ts: timestampMs(ts),

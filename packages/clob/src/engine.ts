@@ -47,7 +47,12 @@ export class Clob {
     for (const { side, price } of touched.values()) {
       const bookSide = side === 'BID' ? 'BUY' : 'SELL';
       const sz = this.book.getLevelSize(bookSide, price);
-      changes.push({ side, yesPriceCents: price, size: shares(sz) });
+      changes.push({
+        side,
+        yesPriceCents: price,
+        size: shares(sz),
+        orderCount: this.book.getLevelOrderCount(bookSide, price),
+      });
     }
     return { marketId: this.marketId, changes, seq, ts };
   }
@@ -87,7 +92,7 @@ export class Clob {
           takerOrderId: order.orderId,
           takerUserId: req.userId,
           takerYesAction: 'BUY',
-          takerSide: req.side,
+          takerSide: order.display.side,
           ts: timestampMs(ts),
         };
         matches.push(match);
@@ -115,7 +120,7 @@ export class Clob {
           takerOrderId: order.orderId,
           takerUserId: req.userId,
           takerYesAction: 'SELL',
-          takerSide: req.side,
+          takerSide: order.display.side,
           ts: timestampMs(ts),
         };
         matches.push(match);

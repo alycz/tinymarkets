@@ -64,10 +64,9 @@ export class Quoter {
           return this.api.placeOrder({
             userId: botUserId,
             marketId: this.marketId,
-            side: 'YES',
-            action: level.side === 'BID' ? 'BUY' : 'SELL',
+            intent: level.side === 'BID' ? 'BUY_YES' : 'SELL_YES',
+            price: level.oddsPriceCents,
             type: 'LIMIT',
-            oddsPriceCents: level.oddsPriceCents,
             size: shares(level.size),
             tif: 'GTC',
           })

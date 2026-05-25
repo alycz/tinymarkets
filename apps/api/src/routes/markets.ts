@@ -24,6 +24,31 @@ export function createMarketsRoutes(session: MarketSession) {
     });
 
     fastify.post<{ Params: { marketId: string } }>(
+      '/markets/:marketId/resolve',
+      async (req, reply) => {
+        const marketId = validateMarketId(req.params.marketId);
+        if (!marketId.ok) {
+          return reply.status(400).send({ ok: false, error: marketId.error });
+        }
+
+        const state = session.getMarketState();
+        if (!state || state.config.marketId !== marketId.value) {
+          return reply.status(404).send({
+            ok: false,
+            error: { code: 'UNKNOWN_MARKET', message: 'Market not found' },
+          });
+        }
+
+        const result = session.resolveActiveMarket();
+        if (!result.ok) {
+          const status = result.error.code === 'UNKNOWN_MARKET' ? 404 : 422;
+          return reply.status(status).send(result);
+        }
+        return reply.send(result);
+      },
+    );
+
+    fastify.post<{ Params: { marketId: string } }>(
       '/markets/:marketId/oracle/demo-spike',
       async (req, reply) => {
         const marketId = validateMarketId(req.params.marketId);

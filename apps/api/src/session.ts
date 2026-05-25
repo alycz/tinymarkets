@@ -1,6 +1,7 @@
 import { MARKET } from '@jet/config';
 import {
   type CanonicalOrder,
+  type Balance,
   type DemoScenarioResponse,
   type DemoSpikeResponse,
   type DemoMode,
@@ -12,6 +13,7 @@ import {
   type OrderBookSnapshot,
   type OrderId,
   type PlaceOrderRequest,
+  type Position,
   type PriceCents,
   type RampResolution,
   type SharePricePoint,
@@ -187,6 +189,26 @@ export class MarketSession {
     return this.lastUserResolutions.get(userId) ?? null;
   }
 
+  resolveActiveMarket(): Result<{ resolution: RampResolution; market: MarketState }> {
+    if (!this.config || !this.marketCore) {
+      return err('UNKNOWN_MARKET', 'No active market');
+    }
+    if (this.status === 'resolved' && this.lastResolution) {
+      return { ok: true, resolution: this.lastResolution, market: this.buildMarketState() };
+    }
+    if (this.status === 'open') {
+      this.status = 'resolving';
+      this.cleanupRestingOrdersForResolution();
+      this.broadcaster?.marketStatus(this.buildMarketState());
+    }
+
+    this.resolveMarket();
+    if (!this.lastResolution) {
+      return err('UNKNOWN_MARKET', 'Resolution failed');
+    }
+    return { ok: true, resolution: this.lastResolution, market: this.buildMarketState() };
+  }
+
   armDemoScenario(marketId: MarketId, scenario: OracleDemoScenario): Result<DemoScenarioResponse> {
     if (!this.config || this.status === null) {
       return err('UNKNOWN_MARKET', 'No active market');
@@ -207,7 +229,13 @@ export class MarketSession {
     return this.armDemoScenario(marketId, 'NEAR_EXPIRY_SPIKE') as Result<DemoSpikeResponse>;
   }
 
-  placeOrder(req: PlaceOrderRequest): Result<{ order: CanonicalOrder; fills: Fill[] }> {
+  placeOrder(req: PlaceOrderRequest): Result<{
+    order: CanonicalOrder;
+    fills: Fill[];
+    remainingOpenOrder?: CanonicalOrder;
+    balance: Balance;
+    position: Position;
+  }> {
     if (!this.clob || !this.marketCore || !this.config) {
       return err('UNKNOWN_MARKET', 'No active market');
     }
@@ -292,6 +320,13 @@ export class MarketSession {
       ok: true,
       order,
       fills: allFills.filter((f) => f.userId === req.userId),
+      ...(
+        order.status === 'OPEN' || order.status === 'PARTIALLY_FILLED'
+          ? { remainingOpenOrder: order }
+          : {}
+      ),
+      balance: this.marketCore.getBalance(req.userId),
+      position: this.marketCore.getPosition(req.userId),
     };
   }
 
@@ -387,7 +422,7 @@ export class MarketSession {
         ? (best.bestBid as number)
         : best.bestAsk !== undefined
         ? (best.bestAsk as number)
-        : 50;
+        : this.oracleFairMarkPrice();
     const yesPriceCents = oddsPriceCents(Math.min(99, Math.max(1, rawPrice)));
     return {
       marketId: this.config!.marketId,
@@ -397,6 +432,19 @@ export class MarketSession {
       source,
       ...best,
     };
+  }
+
+  private oracleFairMarkPrice(): number {
+    const snap = this.oracle.getLatestSnapshot();
+    if (!snap || !this.config || !this.expiryMs) return 50;
+
+    const msRemaining = Math.max(250, this.expiryMs - Date.now());
+    const relDistance =
+      ((snap.btcPriceCents as number) - (this.config.thresholdCents as number)) /
+      (this.config.thresholdCents as number);
+    const sigma = 0.0015 * Math.sqrt(msRemaining / this.config.durationMs);
+    const probability = 1 / (1 + Math.exp(-relDistance / Math.max(0.0001, sigma)));
+    return Math.round(100 * probability);
   }
 
   private tick(): void {
@@ -411,6 +459,10 @@ export class MarketSession {
       this.broadcaster?.marketStatus(state);
       this.resolveTimeout = setTimeout(() => this.resolveMarket(), 2000);
       return;
+    }
+
+    if (this.status === 'open') {
+      this.recordAndBroadcastSharePrice(this.buildMarkSharePricePoint(timestampMs(Date.now())));
     }
 
     const state = this.buildMarketState();
@@ -520,6 +572,20 @@ export class MarketSession {
 }
 
 function orderReserveCentsPerShare(req: PlaceOrderRequest): number {
-  const odds = req.oddsPriceCents as number;
-  return req.action === 'BUY' ? odds : 100 - odds;
+  const { action, price } = orderDisplay(req);
+  const odds = price as number;
+  return action === 'BUY' ? odds : 100 - odds;
+}
+
+function orderDisplay(req: PlaceOrderRequest): { action: 'BUY' | 'SELL'; price: PriceCents } {
+  if (req.intent && req.price !== undefined) {
+    return {
+      action: req.intent === 'BUY_YES' || req.intent === 'BUY_NO' ? 'BUY' : 'SELL',
+      price: req.price,
+    };
+  }
+  if (req.action && req.oddsPriceCents !== undefined) {
+    return { action: req.action, price: req.oddsPriceCents };
+  }
+  throw new RangeError('Order must include either intent/price or side/action/oddsPriceCents');
 }
