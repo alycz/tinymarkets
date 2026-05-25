@@ -17,11 +17,11 @@
   "dependencies": {
     "@jet/shared": "workspace:*",
     "@jet/config": "workspace:*",
+    "tsx": "^4.19.2",
     "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/ws": "^8.5.13",
-    "tsx": "^4.19.2",
     "typescript": "^5.6.0",
     "vitest": "^2.1.9"
   }

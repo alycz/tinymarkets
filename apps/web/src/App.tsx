@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { CSSProperties } from 'react';
-import type { MarketState, MarketConfig } from '@jet/shared';
+import type { MarketConfig, MarketResponse, Result, StartDemoResponse } from '@jet/shared';
 import { useWebSocket } from './hooks/useWebSocket.js';
 import { useMarket } from './hooks/useMarket.js';
 import { useOrderBook } from './hooks/useOrderBook.js';
@@ -30,7 +30,7 @@ export default function App() {
   useEffect(() => {
     fetch(`${API_URL}/markets/current`)
       .then((r) => r.json())
-      .then((data: { ok: boolean; market?: MarketState }) => {
+      .then((data: Result<MarketResponse>) => {
         if (data.ok && data.market) {
           setMarketId(data.market.config.marketId);
           setConfig(data.market.config);
@@ -41,7 +41,7 @@ export default function App() {
 
   const startDemo = useCallback(async () => {
     const res = await fetch(`${API_URL}/markets/start-demo`, { method: 'POST' });
-    const data: { ok: boolean; market?: MarketState } = await res.json();
+    const data: Result<StartDemoResponse> = await res.json();
     if (data.ok && data.market) {
       setMarketId(data.market.config.marketId);
       setConfig(data.market.config);

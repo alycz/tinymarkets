@@ -10,6 +10,7 @@ import type { OrderId } from './units';
 /**
  * REST surface — commands and one-shot snapshots. Live data flows over WS (see ws.ts).
  *
+ *   GET  /health
  *   GET  /markets/current
  *   GET  /markets/:marketId               -> MarketResponse
  *   GET  /markets/:marketId/orderbook     -> OrderBookResponse
@@ -50,6 +51,9 @@ export interface StartDemoResponse { market: MarketState; }
 export interface DemoSpikeResponse {
   scenario: 'NEAR_EXPIRY_SPIKE';
   attackCostEstimate?: AttackCostEstimate;
+}
+export interface HealthResponse {
+  service: 'api';
 }
 
 export type { PlaceOrderRequest };
