@@ -27,6 +27,7 @@ export function useUser(
   recentFills: Fill[];
   userResolution: UserResolutionEvent | null;
   refreshUserSnapshot: () => Promise<void>;
+  recordRecentFills: (fills: Fill[]) => void;
 } {
   const [balance, setBalance] = useState<Balance | null>(null);
   const [position, setPosition] = useState<Position | null>(null);
@@ -45,6 +46,11 @@ export function useUser(
     setPosition(data.snapshot.positions.find((p) => p.marketId === marketId) ?? null);
     setOpenOrders(data.snapshot.openOrders);
   }, [apiUrl, marketId, userId]);
+
+  const recordRecentFills = useCallback((fills: Fill[]) => {
+    if (fills.length === 0) return;
+    setRecentFills((prev) => dedupeFills([...fills, ...prev]).slice(0, 50));
+  }, []);
 
   useEffect(() => {
     setBalance(null);
@@ -91,7 +97,7 @@ export function useUser(
         break;
       case 'fill':
         if (lastEvent.userId === userId && lastEvent.marketId === marketId)
-          setRecentFills((prev) => [lastEvent.fill, ...prev].slice(0, 50));
+          setRecentFills((prev) => dedupeFills([lastEvent.fill, ...prev]).slice(0, 50));
         break;
       case 'pnl_update':
         if (lastEvent.userId === userId && lastEvent.marketId === marketId) {
@@ -108,5 +114,18 @@ export function useUser(
     recentFills,
     userResolution,
     refreshUserSnapshot,
+    recordRecentFills,
   };
+}
+
+function dedupeFills(fills: Fill[]): Fill[] {
+  const seen = new Set<string>();
+  const out: Fill[] = [];
+  for (const fill of fills) {
+    const key = `${fill.tradeId}:${fill.orderId}:${fill.userId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(fill);
+  }
+  return out;
 }

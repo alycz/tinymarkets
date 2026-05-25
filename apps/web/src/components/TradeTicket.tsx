@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
-import type { MarketStatus, Side, Action, UsdCents, PlaceOrderResponse } from '@jet/shared';
-import { MIN_PRICE_CENTS, MAX_PRICE_CENTS, oddsPriceCents, shares } from '@jet/shared';
+import type { Fill, MarketStatus, OrderIntent, PlaceOrderResponse, PriceCents, UsdCents } from '@jet/shared';
+import { MAX_PRICE_CENTS, MIN_PRICE_CENTS, oddsPriceCents, shares } from '@jet/shared';
 import { C, S } from '../theme.js';
-import { formatUsdCents } from '../format.js';
+import { formatPriceCents, formatUsdCents } from '../format.js';
 import Panel from './Panel.js';
 
 interface Props {
@@ -11,29 +11,65 @@ interface Props {
   userId: string;
   marketStatus: MarketStatus;
   apiUrl: string;
+  selectedOrder: { intent: OrderIntent; price: PriceCents; nonce: number } | null;
   onOrderAccepted: () => Promise<void>;
+  onFillsAccepted: (fills: Fill[]) => void;
 }
 
-export default function TradeTicket({ marketId, userId, marketStatus, apiUrl, onOrderAccepted }: Props) {
-  const [side, setSide] = useState<Side>('YES');
-  const [action, setAction] = useState<Action>('BUY');
+const INTENTS: Array<{
+  intent: OrderIntent;
+  label: string;
+  color: string;
+  caption: string;
+}> = [
+  { intent: 'BUY_YES', label: 'Buy YES', color: C.yes, caption: 'Bid YES' },
+  { intent: 'BUY_NO', label: 'Buy NO', color: C.no, caption: 'Ask YES complement' },
+  { intent: 'SELL_YES', label: 'Sell YES', color: C.warn, caption: 'Ask YES' },
+  { intent: 'SELL_NO', label: 'Sell NO', color: C.accent, caption: 'Bid YES complement' },
+];
+
+export default function TradeTicket({
+  marketId,
+  userId,
+  marketStatus,
+  apiUrl,
+  selectedOrder,
+  onOrderAccepted,
+  onFillsAccepted,
+}: Props) {
+  const [intent, setIntent] = useState<OrderIntent>('BUY_YES');
   const [priceInput, setPriceInput] = useState('50');
   const [sizeInput, setSizeInput] = useState('10');
   const [submitting, setSubmitting] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!selectedOrder) return;
+    setIntent(selectedOrder.intent);
+    setPriceInput(String(selectedOrder.price));
+    setHint(`Loaded ${intentLabel(selectedOrder.intent)} from order book`);
+  }, [selectedOrder]);
 
   const priceNum = parseInt(priceInput, 10);
   const sizeNum = parseInt(sizeInput, 10);
   const validPrice = Number.isInteger(priceNum) && priceNum >= MIN_PRICE_CENTS && priceNum <= MAX_PRICE_CENTS;
   const validSize = Number.isInteger(sizeNum) && sizeNum > 0;
   const canSubmit = validPrice && validSize && marketStatus === 'open' && !submitting;
+  const currentIntent = INTENTS.find((item) => item.intent === intent) ?? INTENTS[0]!;
 
-  const estCostCents = validPrice && validSize && action === 'BUY'
-    ? (priceNum * sizeNum) as UsdCents
-    : validPrice && validSize && action === 'SELL'
-    ? ((100 - priceNum) * sizeNum) as UsdCents
-    : null;
-  const maxPayoutCents = validSize ? (100 * sizeNum) as UsdCents : null;
+  const estimates = useMemo(() => {
+    if (!validPrice || !validSize) return null;
+    const isBuy = intent === 'BUY_YES' || intent === 'BUY_NO';
+    const chosenCostPerShare = isBuy ? priceNum : 100 - priceNum;
+    const maxCostCents = chosenCostPerShare * sizeNum;
+    const maxPayoutCents = 100 * sizeNum;
+    return {
+      isBuy,
+      maxCostCents: maxCostCents as UsdCents,
+      maxPayoutCents: maxPayoutCents as UsdCents,
+      maxProfitCents: (maxPayoutCents - maxCostCents) as UsdCents,
+    };
+  }, [intent, priceNum, sizeNum, validPrice, validSize]);
 
   async function submit() {
     if (!canSubmit) return;
@@ -46,10 +82,9 @@ export default function TradeTicket({ marketId, userId, marketStatus, apiUrl, on
         body: JSON.stringify({
           userId,
           marketId,
-          side,
-          action,
+          intent,
+          price: oddsPriceCents(priceNum),
           type: 'LIMIT',
-          oddsPriceCents: oddsPriceCents(priceNum),
           size: shares(sizeNum),
           tif: 'GTC',
         }),
@@ -60,7 +95,9 @@ export default function TradeTicket({ marketId, userId, marketStatus, apiUrl, on
       } else if (!res.ok || !body?.ok) {
         setHint(body && !body.ok ? body.error.message : `Order rejected (${res.status})`);
       } else {
-        setHint('Order placed');
+        onFillsAccepted(body.fills);
+        const fillCopy = body.fills.length === 1 ? '1 fill' : `${body.fills.length} fills`;
+        setHint(body.fills.length > 0 ? `Order accepted · ${fillCopy}` : 'Order resting in the book');
         await onOrderAccepted();
       }
     } catch {
@@ -72,16 +109,23 @@ export default function TradeTicket({ marketId, userId, marketStatus, apiUrl, on
 
   return (
     <Panel title="Trade">
-      <div style={{ display: 'flex', gap: S.xs, marginBottom: S.sm }}>
-        <ToggleBtn label="YES" active={side === 'YES'} color={C.yes} onClick={() => setSide('YES')} />
-        <ToggleBtn label="NO" active={side === 'NO'} color={C.no} onClick={() => setSide('NO')} />
-      </div>
-      <div style={{ display: 'flex', gap: S.xs, marginBottom: S.md }}>
-        <ToggleBtn label="BUY" active={action === 'BUY'} color={C.accent} onClick={() => setAction('BUY')} />
-        <ToggleBtn label="SELL" active={action === 'SELL'} color={C.warn} onClick={() => setAction('SELL')} />
+      <div style={intentGridStyle}>
+        {INTENTS.map((item) => (
+          <IntentButton
+            key={item.intent}
+            label={item.label}
+            caption={item.caption}
+            active={intent === item.intent}
+            color={item.color}
+            onClick={() => {
+              setIntent(item.intent);
+              setHint(null);
+            }}
+          />
+        ))}
       </div>
 
-      <Field label={`Price (${MIN_PRICE_CENTS}–${MAX_PRICE_CENTS} ¢)`}>
+      <Field label={`${priceSideLabel(intent)} limit price (${MIN_PRICE_CENTS}-${MAX_PRICE_CENTS} cents)`}>
         <input
           type="number"
           min={MIN_PRICE_CENTS}
@@ -92,7 +136,7 @@ export default function TradeTicket({ marketId, userId, marketStatus, apiUrl, on
           style={{ ...inputStyle, borderColor: validPrice ? C.border : C.bad }}
         />
       </Field>
-      <Field label="Size (shares)">
+      <Field label="Shares">
         <input
           type="number"
           min={1}
@@ -103,12 +147,16 @@ export default function TradeTicket({ marketId, userId, marketStatus, apiUrl, on
         />
       </Field>
 
-      {estCostCents != null && (
-        <div style={{ fontSize: 12, color: C.textDim, marginBottom: S.sm }}>
-          Est. cost: <strong style={{ color: C.text }}>{formatUsdCents(estCostCents)}</strong>
-          {maxPayoutCents != null && (
-            <> · Max payout: <strong style={{ color: C.yes }}>{formatUsdCents(maxPayoutCents)}</strong></>
-          )}
+      {estimates && (
+        <div style={estimateBoxStyle}>
+          <TicketRow
+            label={estimates.isBuy ? 'Max cost' : 'Reserve required'}
+            value={formatUsdCents(estimates.maxCostCents)}
+          />
+          <TicketRow label="Max payout" value={formatUsdCents(estimates.maxPayoutCents)} color={C.yes} />
+          <TicketRow label="Max profit" value={formatUsdCents(estimates.maxProfitCents)} color={C.yes} />
+          <TicketRow label="Break-even" value={`${formatPriceCents(priceNum as PriceCents)} implied`} />
+          <div style={normalizationStyle}>{normalizationCopy(intent, priceNum as PriceCents)}</div>
         </div>
       )}
 
@@ -119,17 +167,19 @@ export default function TradeTicket({ marketId, userId, marketStatus, apiUrl, on
           ...submitBtn,
           opacity: canSubmit ? 1 : 0.4,
           cursor: canSubmit ? 'pointer' : 'not-allowed',
-          background: action === 'BUY' ? C.accent : C.warn,
+          background: currentIntent.color,
         }}
       >
-        {submitting ? '…' : `${action} ${side}`}
+        {submitting ? 'Submitting...' : currentIntent.label}
       </button>
 
       {marketStatus !== 'open' && (
         <div style={{ fontSize: 11, color: C.textMute, marginTop: S.xs }}>
-          {marketStatus === 'resolving' || marketStatus === 'resolved'
-            ? `Trading disabled while market is ${marketStatus}.`
-            : `Market ${marketStatus} — trading disabled`}
+          {marketStatus === 'resolving'
+            ? 'Resolving from oracle TWAP... trading disabled.'
+            : marketStatus === 'resolved'
+            ? 'Market resolved. Trading disabled.'
+            : `Market ${marketStatus}; trading disabled.`}
         </div>
       )}
       {hint && (
@@ -148,38 +198,81 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function ToggleBtn({
+function IntentButton({
   label,
+  caption,
   active,
   color,
   onClick,
 }: {
   label: string;
+  caption: string;
   active: boolean;
   color: string;
   onClick: () => void;
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       style={{
-        flex: 1,
-        padding: '5px 0',
+        minHeight: 56,
+        padding: `${S.sm}px`,
         border: `1px solid ${active ? color : C.border}`,
-        borderRadius: 4,
-        background: active ? color + '22' : 'transparent',
-        color: active ? color : C.textMute,
-        fontSize: 12,
-        fontWeight: 700,
+        borderRadius: 6,
+        background: active ? color + '22' : C.panelAlt,
+        color: active ? color : C.text,
         cursor: 'pointer',
         fontFamily: 'inherit',
-        letterSpacing: '0.06em',
+        textAlign: 'left',
       }}
     >
-      {label}
+      <div style={{ fontSize: 13, fontWeight: 800 }}>{label}</div>
+      <div style={{ fontSize: 10, color: active ? color : C.textMute, marginTop: 2 }}>{caption}</div>
     </button>
   );
 }
+
+function TicketRow({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: S.sm, fontSize: 12 }}>
+      <span style={{ color: C.textDim }}>{label}</span>
+      <span style={{ color: color ?? C.text, fontWeight: 700 }}>{value}</span>
+    </div>
+  );
+}
+
+function intentLabel(intent: OrderIntent): string {
+  return intent.replace('_', ' ');
+}
+
+function priceSideLabel(intent: OrderIntent): string {
+  return intent.endsWith('NO') ? 'NO' : 'YES';
+}
+
+function canonicalYesPrice(intent: OrderIntent, price: PriceCents): PriceCents {
+  if (intent === 'BUY_NO' || intent === 'SELL_NO') {
+    return oddsPriceCents(100 - price);
+  }
+  return price;
+}
+
+function normalizationCopy(intent: OrderIntent, price: PriceCents): string {
+  const yesPrice = canonicalYesPrice(intent, price);
+  if (intent === 'BUY_YES') return `Routes to canonical YES bid at ${formatPriceCents(yesPrice)}.`;
+  if (intent === 'SELL_YES') return `Routes to canonical YES ask at ${formatPriceCents(yesPrice)}.`;
+  if (intent === 'BUY_NO') {
+    return `Buy NO at ${formatPriceCents(price)} = sell YES at ${formatPriceCents(yesPrice)}.`;
+  }
+  return `Sell NO at ${formatPriceCents(price)} = buy YES at ${formatPriceCents(yesPrice)}.`;
+}
+
+const intentGridStyle: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: '1fr 1fr',
+  gap: S.xs,
+  marginBottom: S.md,
+};
 
 const inputStyle: CSSProperties = {
   width: '100%',
@@ -193,15 +286,34 @@ const inputStyle: CSSProperties = {
   boxSizing: 'border-box',
 };
 
+const estimateBoxStyle: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: S.xs,
+  border: `1px solid ${C.border}`,
+  borderRadius: 6,
+  background: C.panelAlt,
+  padding: S.sm,
+  marginBottom: S.sm,
+};
+
+const normalizationStyle: CSSProperties = {
+  borderTop: `1px solid ${C.border}`,
+  paddingTop: S.xs,
+  marginTop: S.xs,
+  color: C.textMute,
+  fontSize: 11,
+  lineHeight: 1.35,
+};
+
 const submitBtn: CSSProperties = {
   width: '100%',
-  padding: '8px 0',
+  padding: '9px 0',
   border: 'none',
   borderRadius: 4,
   color: '#fff',
   fontSize: 13,
-  fontWeight: 700,
+  fontWeight: 800,
   fontFamily: 'inherit',
-  letterSpacing: '0.06em',
   marginTop: S.xs,
 };

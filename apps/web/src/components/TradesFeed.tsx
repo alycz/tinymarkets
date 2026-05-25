@@ -38,7 +38,6 @@ function Header() {
   return (
     <div style={{ ...row, color: C.textMute, fontSize: 10, letterSpacing: '0.08em', marginBottom: S.xs }}>
       <span>AGE</span>
-      <span>TRADER</span>
       <span>ACTION</span>
       <span>PRICE</span>
       <span style={{ textAlign: 'right' }}>SIZE</span>
@@ -59,17 +58,18 @@ interface ActivityRow {
 function TradeRow({ activity }: { activity: ActivityRow }) {
   const { trade } = activity;
   const age = formatAge(Date.now() - trade.ts);
-  const sideColor = activity.side === 'YES' ? C.yes : C.no;
+  const sideColor = trade.takerSide === 'YES' ? C.yes : C.no;
+  const displayPrice =
+    trade.takerSide === 'YES'
+      ? trade.yesPriceCents
+      : ((100 - trade.yesPriceCents) as typeof trade.yesPriceCents);
 
   return (
     <div style={{ ...row, fontSize: 12, marginBottom: 3 }}>
       <span style={{ color: C.textMute }}>{age}</span>
-      <span style={{ color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {activity.userId}
-      </span>
-      <span style={{ color: sideColor, fontWeight: 600 }}>{activity.action} {activity.side}</span>
+      <span style={{ color: sideColor, fontWeight: 600 }}>Bought {trade.takerSide}</span>
       <span style={{ color: C.text }}>
-        {formatPriceCents(activity.priceCents as Trade['yesPriceCents'])}
+        {formatPriceCents(displayPrice)}
       </span>
       <span style={{ color: C.text, textAlign: 'right' }}>{trade.size as number}</span>
       <span style={{ color: C.textMute }}>{KIND_LABEL[trade.kind]}</span>

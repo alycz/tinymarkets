@@ -29,8 +29,10 @@ export default function App() {
     balance,
     position,
     openOrders,
+    recentFills,
     userResolution,
     refreshUserSnapshot,
+    recordRecentFills,
   } = useUser(DEMO_USER_ID, marketId, API_URL, send, lastEvent, status);
   const oraclePriceHistory = usePriceHistory(marketId, API_URL, oracleSnapshot);
   const sharePriceHistory = useSharePriceHistory(marketId, API_URL, send, lastEvent, status);
@@ -77,8 +79,10 @@ export default function App() {
           balance={balance}
           position={position}
           openOrders={openOrders}
+          recentFills={recentFills}
           userResolution={userResolution}
           refreshUserSnapshot={refreshUserSnapshot}
+          recordRecentFills={recordRecentFills}
           oraclePriceHistory={oraclePriceHistory}
           sharePriceHistory={sharePriceHistory}
           userId={DEMO_USER_ID}
