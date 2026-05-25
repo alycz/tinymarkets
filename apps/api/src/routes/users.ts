@@ -1,13 +1,18 @@
 import type { FastifyInstance } from 'fastify';
 import type { MarketSession } from '../session.js';
+import { validateUserId } from '../validators.js';
 
 export function createUsersRoutes(session: MarketSession) {
   return async function (fastify: FastifyInstance) {
     fastify.get<{ Params: { userId: string } }>(
       '/users/:userId',
       async (req, reply) => {
-        const { userId } = req.params;
-        const snapshot = session.getUserSnapshot(userId);
+        const userId = validateUserId(req.params.userId);
+        if (!userId.ok) {
+          return reply.status(400).send({ ok: false, error: userId.error });
+        }
+
+        const snapshot = session.getUserSnapshot(userId.value);
         if (!snapshot) {
           return reply.status(404).send({
             ok: false,
@@ -21,8 +26,12 @@ export function createUsersRoutes(session: MarketSession) {
     fastify.get<{ Params: { userId: string } }>(
       '/users/:userId/positions',
       async (req, reply) => {
-        const { userId } = req.params;
-        const snapshot = session.getUserSnapshot(userId);
+        const userId = validateUserId(req.params.userId);
+        if (!userId.ok) {
+          return reply.status(400).send({ ok: false, error: userId.error });
+        }
+
+        const snapshot = session.getUserSnapshot(userId.value);
         if (!snapshot) {
           return reply.status(404).send({
             ok: false,

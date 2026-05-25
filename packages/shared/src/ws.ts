@@ -1,5 +1,6 @@
 import type { IndicativeSnapshot, RampResolution } from './oracle';
 import type { OrderBookDelta, OrderBookSnapshot } from './orderbook';
+import type { CanonicalOrder } from './orders';
 import type { Trade, Fill } from './trades';
 import type { Balance, Position } from './positions';
 import type { MarketStatus } from './market';
@@ -35,7 +36,7 @@ export function parseChannel(c: Channel): { kind: ChannelKind; id: string } {
 
 export interface SubscribeMessage { type: 'subscribe'; channels: Channel[]; }
 export interface UnsubscribeMessage { type: 'unsubscribe'; channels: Channel[]; }
-export interface PingMessage { type: 'ping'; ts: TimestampMs; }
+export interface PingMessage { type: 'ping'; ts?: TimestampMs; }
 
 export type ClientMessage = SubscribeMessage | UnsubscribeMessage | PingMessage;
 
@@ -60,6 +61,11 @@ export interface MarketResolvedEvent { type: 'market:resolved'; resolution: Ramp
 
 export interface UserBalanceEvent { type: 'user:balance'; balance: Balance; }
 export interface UserPositionEvent { type: 'user:position'; position: Position; }
+export interface UserOpenOrdersEvent {
+  type: 'user:open_orders';
+  userId: UserId;
+  openOrders: CanonicalOrder[];
+}
 export interface UserFillEvent { type: 'user:fill'; fill: Fill; }
 export interface UserResolutionEvent {
   type: 'user:resolution';
@@ -85,6 +91,7 @@ export type ServerEvent =
   | MarketResolvedEvent
   | UserBalanceEvent
   | UserPositionEvent
+  | UserOpenOrdersEvent
   | UserFillEvent
   | UserResolutionEvent
   | SubscribedEvent

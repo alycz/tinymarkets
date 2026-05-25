@@ -31,6 +31,10 @@ export async function buildServer(session: MarketSession, manager: WsManager) {
   server.register(createMarketsRoutes(session));
   server.register(createOrdersRoutes(session));
   server.register(createUsersRoutes(session));
+  server.addHook('onClose', (_instance, done) => {
+    manager.destroy();
+    done();
+  });
 
   // WS route must be inside a nested plugin so @fastify/websocket's onRoute hook applies
   server.register(async (fastify) => {
@@ -52,7 +56,7 @@ export async function buildServer(session: MarketSession, manager: WsManager) {
 function parseCorsOrigins(): Set<string> {
   const raw = process.env['CORS_ORIGIN'];
   if (!raw) {
-    throw new Error('CORS_ORIGIN is required');
+    return new Set(['http://localhost:5173', 'http://127.0.0.1:5173']);
   }
   const origins = raw
     .split(',')
