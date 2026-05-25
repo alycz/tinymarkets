@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { MarketConfig, QuoteCurrency, TimestampMs, VenueId, VenueQuote } from '@jet/shared';
-import type { OracleConfig, PartitionAggregation } from './oracle-config.js';
+import type { OracleConfig } from './oracle-config.js';
 
 /**
  * Canonical deterministic hash of the input samples.
@@ -28,7 +28,6 @@ export interface ResolutionInputHashParams {
   config: MarketConfig;
   expiryTs: TimestampMs;
   oracleCfg: OracleConfig;
-  partitionAggregation: PartitionAggregation;
 }
 
 export function inputHashFromResolutionInputs({
@@ -37,7 +36,6 @@ export function inputHashFromResolutionInputs({
   config,
   expiryTs,
   oracleCfg,
-  partitionAggregation,
 }: ResolutionInputHashParams): string {
   const payload = {
     market: {
@@ -49,16 +47,14 @@ export function inputHashFromResolutionInputs({
       method: oracleCfg.method,
       ruleVersion: oracleCfg.ruleVersion,
       windowMs: oracleCfg.windowMs,
-      partitionSeconds: oracleCfg.partitionSeconds,
-      partitionCount: oracleCfg.partitionCount,
       staleMs: oracleCfg.staleMs,
       wideSpreadBps: oracleCfg.wideSpreadBps,
       outlierBpsFloor: oracleCfg.outlierBpsFloor,
-      madMultiple: oracleCfg.madMultiple,
+      outlierUsdCentsFloor: oracleCfg.outlierUsdCentsFloor,
       minVenues: oracleCfg.minVenues,
       venueInput: oracleCfg.venueInput,
       venueAggregation: oracleCfg.venueAggregation,
-      partitionAggregation,
+      weights: oracleCfg.weights,
       dispersion: oracleCfg.dispersion,
     },
     venues: canonicalVenues(venues),

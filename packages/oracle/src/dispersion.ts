@@ -18,7 +18,7 @@ export function classifyDispersion(madBps: number, oracleCfg: OracleConfig): Dis
 /**
  * Derive the output-only confidence band.
  *
- * `confidenceBps` is derived from residual survivor dispersion and partition variance.
+ * `confidenceBps` is derived from residual survivor dispersion and optional window variance.
  * `confidence` is LOW on too few survivors, stressed/dislocated dispersion, or near-threshold
  * resolution; MEDIUM on minimum survivor count or elevated variance; HIGH otherwise.
  *

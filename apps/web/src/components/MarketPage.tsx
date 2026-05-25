@@ -4,7 +4,7 @@ import type {
   MarketConfig,
   MarketStatus,
   IndicativeSnapshot,
-  RampResolution,
+  VenueWeightedTwapResolution,
   OrderBookSnapshot,
   Trade,
   Balance,
@@ -36,7 +36,7 @@ interface Props {
   serverTs: TimestampMs | null;
   wsStatus: WsStatus;
   oracleSnapshot: IndicativeSnapshot | null;
-  resolution: RampResolution | null;
+  resolution: VenueWeightedTwapResolution | null;
   orderBookSnapshot: OrderBookSnapshot | null;
   trades: Trade[];
   balance: Balance | null;
@@ -212,7 +212,7 @@ function ResolutionBanner({
   thresholdCents,
   userResolution,
 }: {
-  resolution: RampResolution;
+  resolution: VenueWeightedTwapResolution;
   thresholdCents: UsdCents;
   userResolution: UserResolutionEvent | null;
 }) {
@@ -229,7 +229,7 @@ function ResolutionBanner({
           {resolution.outcome}
         </div>
       </div>
-      <ResolutionStat label="RAMP_V1 reference price" value={formatUsdCents(resolution.resolutionPriceCents)} />
+      <ResolutionStat label="Weighted TWAP reference price" value={formatUsdCents(resolution.resolutionPriceCents)} />
       <ResolutionStat label="Strike" value={formatUsdCents(thresholdCents)} />
       <ResolutionStat label="Your position at resolution" value={formatResolvedPosition(netAtResolution)} />
       <ResolutionStat label="Payout" value={formatUsdCents(payoutCents)} emphasize />

@@ -28,7 +28,7 @@ export interface BuildIndicativeParams {
   oracleCfg: OracleConfig;
 }
 
-/** Build the live indicative price snapshot — equal-weight median of healthy venue mids. */
+/** Build the live indicative price snapshot: cleaned weighted aggregate of healthy venue mids. */
 export function buildIndicative({
   marketId,
   config,
@@ -117,14 +117,19 @@ export function buildIndicative({
   const madBpsValue = candidateValues.length > 1
     ? Math.round((computeMad(candidateValues, crossVenueMedian) / (crossVenueMedian || 1)) * 10_000)
     : 0;
-  const outlierThreshold = Math.max(oracleCfg.outlierBpsFloor, oracleCfg.madMultiple * madBpsValue);
-  const survivorMids: number[] = [];
+  const outlierThreshold = Math.max(oracleCfg.outlierBpsFloor, madBpsValue);
+  const survivorMids: { venue: VenueId; midMillicents: number; weight: number }[] = [];
 
   for (const candidate of candidateMids) {
     const deviationBps = crossVenueMedian > 0
       ? Math.round((Math.abs(candidate.midMillicents - crossVenueMedian) / crossVenueMedian) * 10_000)
       : 0;
-    if (deviationBps > outlierThreshold) {
+    const deviationMillicents = Math.abs(candidate.midMillicents - crossVenueMedian);
+    const thresholdMillicents = Math.max(
+      (crossVenueMedian * oracleCfg.outlierBpsFloor) / 10_000,
+      oracleCfg.outlierUsdCentsFloor * 10,
+    );
+    if (deviationBps > outlierThreshold || deviationMillicents > thresholdMillicents) {
       const venue = venues[candidate.index]!;
       venues[candidate.index] = {
         ...venue,
@@ -132,14 +137,19 @@ export function buildIndicative({
         excludedReason: 'OUTLIER',
       };
     } else {
-      survivorMids.push(candidate.midMillicents);
+      survivorMids.push({
+        venue: candidate.venue,
+        midMillicents: candidate.midMillicents,
+        weight: oracleCfg.weights[candidate.venue] ?? 0,
+      });
     }
   }
 
+  const weightedMid = weightedMean(survivorMids);
   const btcPriceCents = usdCents(
     roundMillicentsToCentsHalfUp(
-      survivorMids.length > 0
-        ? computeMedian(survivorMids)
+      weightedMid !== null
+        ? weightedMid
         : crossVenueMedian > 0
           ? crossVenueMedian
           : centsToMillicents(10_000_000),
@@ -171,4 +181,14 @@ export function buildIndicative({
     ts: now,
     ...(formingResolution ? { formingResolution } : {}),
   };
+}
+
+function weightedMean(values: readonly { midMillicents: number; weight: number }[]): number | null {
+  if (values.length === 0) return null;
+  const positive = values.filter(v => v.weight > 0);
+  const source = positive.length > 0 ? positive : values;
+  const equal = positive.length === 0;
+  const total = source.reduce((sum, v) => sum + (equal ? 1 : v.weight), 0);
+  if (total <= 0) return null;
+  return source.reduce((sum, v) => sum + v.midMillicents * ((equal ? 1 : v.weight) / total), 0);
 }

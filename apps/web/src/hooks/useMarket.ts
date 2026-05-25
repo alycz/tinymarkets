@@ -4,7 +4,7 @@ import type {
   ServerEvent,
   MarketStatus,
   IndicativeSnapshot,
-  RampResolution,
+  VenueWeightedTwapResolution,
   TimestampMs,
 } from '@jet/shared';
 import { marketChannel, oracleChannel } from '@jet/shared';
@@ -21,14 +21,14 @@ export function useMarket(
   serverTs: TimestampMs | null;
   expiryMs: TimestampMs | null;
   oracleSnapshot: IndicativeSnapshot | null;
-  resolution: RampResolution | null;
+  resolution: VenueWeightedTwapResolution | null;
 } {
   const [marketStatus, setMarketStatus] = useState<MarketStatus | null>(null);
   const [msRemaining, setMsRemaining] = useState(0);
   const [serverTs, setServerTs] = useState<TimestampMs | null>(null);
   const [expiryMs, setExpiryMs] = useState<TimestampMs | null>(null);
   const [oracleSnapshot, setOracleSnapshot] = useState<IndicativeSnapshot | null>(null);
-  const [resolution, setResolution] = useState<RampResolution | null>(null);
+  const [resolution, setResolution] = useState<VenueWeightedTwapResolution | null>(null);
 
   // Reset state when marketId changes
   useEffect(() => {

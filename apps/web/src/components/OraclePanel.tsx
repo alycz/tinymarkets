@@ -8,11 +8,10 @@ import type {
   MarketId,
   MarketStatus,
   OracleDemoScenario,
-  RampResolution,
   Result,
   TimestampMs,
-  UsdCents,
   VenueHealth,
+  VenueWeightedTwapResolution,
 } from '@jet/shared';
 import { C, S } from '../theme.js';
 import { formatUsdCents, formatBps } from '../format.js';
@@ -20,7 +19,7 @@ import Panel from './Panel.js';
 
 interface Props {
   oracleSnapshot: IndicativeSnapshot | null;
-  resolution: RampResolution | null;
+  resolution: VenueWeightedTwapResolution | null;
   marketId: MarketId;
   marketStatus: MarketStatus;
   msRemaining: number;
@@ -28,7 +27,7 @@ interface Props {
   apiUrl: string;
 }
 
-const FINAL_WINDOW_MS = 30_000;
+const FINAL_WINDOW_MS = 15_000;
 
 const DISPERSION_COLOR: Record<DispersionState, string> = {
   NORMAL: C.ok,
@@ -115,7 +114,7 @@ export default function OraclePanel({
     );
   }
   return (
-    <Panel title="Oracle · RAMP_V1">
+    <Panel title="Oracle · VENUE_WEIGHTED_TWAP_V1">
       <div style={topLineStyle}>
         {demoControl}
       </div>
@@ -144,11 +143,11 @@ function PreResolution({
   const inFinalWindow = msRemaining <= FINAL_WINDOW_MS;
 
   return (
-    <Panel title="Oracle · RAMP_V1">
+    <Panel title="Oracle · VENUE_WEIGHTED_TWAP_V1">
       <div style={topLineStyle}>
         <div>
           <div style={metaLabel}>METHOD</div>
-          <Pill text="RAMP_V1" color={C.accent} />
+          <Pill text="VENUE_WEIGHTED_TWAP_V1" color={C.accent} />
         </div>
         <div>
           <div style={metaLabel}>FINAL WINDOW</div>
@@ -196,9 +195,12 @@ function PreResolution({
                 {formatUsdCents(forming.formingPriceCents)}
               </div>
             </div>
-            <Pill text={`${forming.partitions.length}/${forming.window.partitionCount} partitions`} color={C.warn} />
+            <Pill
+              text={`${Math.min(100, Math.round((forming.elapsedMs / forming.window.windowMs) * 100))}% window`}
+              color={forming.complete ? C.ok : C.warn}
+            />
           </div>
-          <PartitionRows partitions={forming.partitions} />
+          <VenueTwapRows venues={forming.venues} />
         </div>
       )}
 
@@ -226,14 +228,14 @@ function PostResolution({
   demoControl,
   attackCostEstimate,
 }: {
-  resolution: RampResolution;
+  resolution: VenueWeightedTwapResolution;
   demoControl: ReactNode;
   attackCostEstimate: AttackCostEstimate | null;
 }) {
   const dispColor = DISPERSION_COLOR[resolution.dispersionState];
 
   return (
-    <Panel title="Oracle · RAMP_V1 · Settled">
+    <Panel title="Oracle · VENUE_WEIGHTED_TWAP_V1 · Settled">
       <div style={topLineStyle}>
         <div>
           <div style={metaLabel}>METHOD</div>
@@ -304,19 +306,13 @@ function PostResolution({
       </div>
 
       <div style={sectionStyle}>
-        <div style={{ ...metaLabel, marginBottom: S.xs }}>PARTITION BREAKDOWN</div>
-        <PartitionRows partitions={resolution.partitions} />
+        <div style={{ ...metaLabel, marginBottom: S.xs }}>VENUE TWAPS AND WEIGHTS</div>
+        <VenueTwapRows venues={resolution.venueTwaps} />
       </div>
 
       <div style={sectionStyle}>
-        <div style={{ ...metaLabel, marginBottom: S.xs }}>SOURCE USAGE</div>
-        <div style={sourceUsageGridStyle}>
-          {resolution.sourceUsage.map((s) => (
-            <div key={s.venue} style={{ color: C.text, fontSize: 12 }}>
-              <strong>{s.venue}</strong> {s.partitionsUsed}/{resolution.window.partitionCount} used
-            </div>
-          ))}
-        </div>
+        <div style={metaLabel}>TIE RULE</div>
+        <div style={{ color: C.text, fontSize: 12 }}>{resolution.tieRule}</div>
       </div>
 
       {attackCostEstimate && <AttackCost estimate={attackCostEstimate} />}
@@ -418,26 +414,27 @@ function VenueRow({ venue }: { venue: VenueHealth }) {
   );
 }
 
-function PartitionRows({
-  partitions,
+function VenueTwapRows({
+  venues,
 }: {
-  partitions: Array<{
-    index: number;
-    btcPriceCents: UsdCents;
-    validVenues: number;
-    excludedVenues: number;
-    complete?: boolean;
-  }>;
+  venues: VenueWeightedTwapResolution['venueTwaps'];
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      {partitions.map((p) => (
-        <div key={p.index} style={partitionRowStyle}>
-          <span style={{ color: C.textDim }}>P{p.index}</span>
-          <span style={{ color: C.text, fontWeight: 700 }}>{formatUsdCents(p.btcPriceCents)}</span>
-          <span style={{ color: C.textDim }}>{p.validVenues} used</span>
-          <span style={{ color: p.excludedVenues > 0 ? C.warn : C.textDim }}>{p.excludedVenues} excluded</span>
-          {'complete' in p && <Pill text={p.complete ? 'FINAL' : 'FORMING'} color={p.complete ? C.ok : C.warn} small />}
+      {venues.map((v) => (
+        <div key={v.venue} style={venueTwapRowStyle}>
+          <span style={{ color: C.text, fontWeight: 700 }}>{v.venue}</span>
+          <span style={{ color: C.text, fontWeight: 700 }}>
+            {v.twapCents != null ? formatUsdCents(v.twapCents) : '--'}
+          </span>
+          <span style={{ color: C.textDim }}>{formatWeight(v.weight)}</span>
+          <span style={{ color: C.textDim }}>{v.normalizedWeight != null ? formatWeight(v.normalizedWeight) : '--'}</span>
+          <Pill
+            text={v.included ? 'USED' : v.excludedReason ?? 'EXCLUDED'}
+            color={v.included ? C.ok : v.excludedReason === 'OUTLIER' ? C.bad : C.warn}
+            small
+          />
+          {v.deviationBps != null && <span style={{ color: C.warn }}>{formatBps(v.deviationBps)}</span>}
         </div>
       ))}
     </div>
@@ -500,6 +497,10 @@ function formatDuration(ms: number): string {
 
 function formatServerTs(ts: TimestampMs): string {
   return new Date(ts).toLocaleTimeString([], { hour12: false });
+}
+
+function formatWeight(weight: number): string {
+  return `${Math.round(weight * 100)}%`;
 }
 
 const metaLabel: CSSProperties = {
@@ -568,20 +569,14 @@ const venueRowStyle: CSSProperties = {
   borderBottom: `1px solid ${C.border}55`,
 };
 
-const partitionRowStyle: CSSProperties = {
+const venueTwapRowStyle: CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: '36px minmax(116px, 1fr) 72px 88px auto',
+  gridTemplateColumns: 'minmax(72px, 1fr) minmax(116px, 1.2fr) 56px 56px minmax(88px, auto) 56px',
   gap: S.sm,
   alignItems: 'center',
   fontSize: 12,
   padding: '4px 0',
   borderBottom: `1px solid ${C.border}44`,
-};
-
-const sourceUsageGridStyle: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-  gap: S.xs,
 };
 
 const excludedSourceStyle: CSSProperties = {

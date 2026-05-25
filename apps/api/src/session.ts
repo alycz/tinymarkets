@@ -13,12 +13,12 @@ import {
   type OrderId,
   type PlaceOrderRequest,
   type PriceCents,
-  type RampResolution,
   type SharePricePoint,
   type SignedShares,
   type Trade,
   type UserId,
   type UserResolutionEvent,
+  type VenueWeightedTwapResolution,
   type UserSnapshot,
   noPriceCents,
   oddsPriceCents,
@@ -30,7 +30,7 @@ import {
 import type { ApiError } from '@jet/shared';
 import { Clob } from '@jet/clob';
 import { MarketCore } from '@jet/market-core';
-import { RampOracle } from '@jet/oracle';
+import { VenueWeightedTwapOracle } from '@jet/oracle';
 import type { ScenarioName } from '@jet/oracle';
 import type { OracleDemoScenario } from '@jet/shared';
 import type { Broadcaster } from './broadcasts.js';
@@ -47,7 +47,7 @@ function err(code: ApiError['code'], message: string): ErrResult {
 export class MarketSession {
   private clob: Clob | null = null;
   private marketCore: MarketCore | null = null;
-  private oracle: RampOracle;
+  private oracle: VenueWeightedTwapOracle;
   private status: MarketState['status'] | null = null;
   private expiryMs: number | null = null;
   private openedAtMs: number | null = null;
@@ -65,12 +65,12 @@ export class MarketSession {
   private orderReserves = new Map<OrderId, OrderReserve>();
 
   private knownUsers = new Set<UserId>();
-  private lastResolution: RampResolution | null = null;
+  private lastResolution: VenueWeightedTwapResolution | null = null;
   private lastUserResolutions = new Map<UserId, UserResolutionEvent>();
   private broadcaster: Broadcaster | null = null;
 
   constructor(opts?: { oracleScenario?: ScenarioName; seed?: number; demoMode?: DemoMode }) {
-    this.oracle = new RampOracle({
+    this.oracle = new VenueWeightedTwapOracle({
       scenario: opts?.oracleScenario ?? 'HONEST',
       seed: opts?.seed ?? 12345,
       demoMode: opts?.demoMode ?? 'simulated',
@@ -179,7 +179,7 @@ export class MarketSession {
     };
   }
 
-  getLastResolution(): RampResolution | null {
+  getLastResolution(): VenueWeightedTwapResolution | null {
     return this.lastResolution;
   }
 

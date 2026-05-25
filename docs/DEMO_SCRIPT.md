@@ -45,9 +45,9 @@ Before expiry, click either:
 - `Arm Spike Demo`: one simulated venue spikes near expiry.
 - `Arm Subtle Demo`: one simulated venue drifts into a less obvious dislocation.
 
-During the final 30 seconds, point out:
+During the final 15 seconds, point out:
 
-- The forming final-window partitions.
+- The forming final-window weighted TWAP.
 - The live indicative price remains separate from settlement.
 - Dispersion and confidence update as venue quality changes.
 
@@ -55,16 +55,16 @@ During the final 30 seconds, point out:
 
 At resolution, inspect:
 
-- Final `RAMP_V1` reference price.
+- Final `VENUE_WEIGHTED_TWAP_V1` reference price.
 - Strict outcome rule: YES only if final price is above the strike.
 - User position at resolution.
 - Actual payout and realized PnL.
 - Sources used and excluded.
-- Source usage by partition.
+- Per-venue TWAPs and normalized weights.
 - Quality flags and dispersion state.
 - Replay `inputHash`.
 
-The intended story is that a single stressed venue is either excluded or made visible through lower confidence/dispersion flags, while the final median-of-partitions benchmark remains deterministic and auditable.
+The intended story is that a single stressed venue is either excluded or made visible through lower confidence/dispersion flags, while the final cleaned weighted-TWAP benchmark remains deterministic and auditable.
 
 ## 6. Restart
 

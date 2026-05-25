@@ -39,7 +39,8 @@ export type OracleDemoScenario = 'NEAR_EXPIRY_SPIKE' | 'SUBTLE_DISLOCATION';
 export type ResolutionQualityFlag =
   | 'INSUFFICIENT_VALID_VENUES'
   | 'HIGH_DISPERSION'
-  | 'NEAR_THRESHOLD';
+  | 'NEAR_THRESHOLD'
+  | 'FALLBACK_SIMULATED_AGGREGATE';
 
 /** Per-venue health for the transparency panel. Drives include/exclude — NEVER weighting. */
 export interface VenueHealth {
@@ -53,11 +54,7 @@ export interface VenueHealth {
   excludedReason?: VenueExclusionReason;
 }
 
-/**
- * Live Indicative Price — what the user sees and (loosely) trades against.
- * Equal-weight median of healthy venue mids, refreshed ~1s.
- * This is intentionally NOT the settlement price.
- */
+/** Live BTC/USD oracle price. This is intentionally NOT the traded YES share price. */
 export interface IndicativeSnapshot {
   marketId: MarketId;
   btcPriceCents: UsdCents;
@@ -68,59 +65,62 @@ export interface IndicativeSnapshot {
   dispersionState: DispersionState;
   venues: VenueHealth[];
   ts: TimestampMs;
-  /** Present only while the final RAMP_V1 window is forming; never settlement. */
+  /** Present only while the final VENUE_WEIGHTED_TWAP_V1 window is forming; never settlement. */
   formingResolution?: FormingResolution;
 }
 
-/** One 5s slice of the final settlement window. */
-export interface PartitionResult {
-  index: number;          // 1..partitionCount
-  startTs: TimestampMs;
-  endTs: TimestampMs;
-  /** equal-weight median of surviving venues' mid-price TWAPs for this slice */
-  btcPriceCents: UsdCents;
-  validVenues: number;
-  excludedVenues: number;
+export interface FormingResolutionVenue {
+  venue: VenueId;
+  twapCents: UsdCents | null;
+  weight: number;
+  normalizedWeight?: number;
+  included: boolean;
+  excludedReason?: VenueExclusionReason;
+  deviationBps?: Bps;
 }
 
-/** Live, non-settlement preview of the final RAMP_V1 window as partitions form. */
-export interface FormingPartitionResult extends PartitionResult {
-  complete: boolean;
-}
-
+/** Live, non-settlement preview of the final TWAP window as it forms. */
 export interface FormingResolution {
-  method: 'RAMP_V1';
+  method: 'VENUE_WEIGHTED_TWAP_V1';
   window: {
     startTs: TimestampMs;
     endTs: TimestampMs;
-    partitionSeconds: number;
-    partitionCount: number;
+    windowMs: number;
   };
   formingPriceCents: UsdCents;
-  partitions: FormingPartitionResult[];
+  complete: boolean;
+  elapsedMs: number;
+  venues: FormingResolutionVenue[];
 }
 
 /**
- * RAMP_V1 — the deterministic, replayable settlement object.
- * Resolution price = median of the partition prices (not mean — robust to
- * clustered end-of-window spikes). inputHash makes it recomputable from logs.
+ * VENUE_WEIGHTED_TWAP_V1 — deterministic BTC/USD settlement object.
+ * Required snake_case fields match the methodology brief; camelCase cent fields are
+ * audit/display helpers used by the local app.
  */
-export interface RampResolution {
+export interface VenueWeightedTwapResolution {
+  market_id: MarketId;
+  expiry_ts: TimestampMs;
+  threshold: number;
+  resolution_price: number;
+  method: 'VENUE_WEIGHTED_TWAP_V1';
+  sources_used: VenueId[];
+  sources_excluded: { venue: VenueId; reason: VenueExclusionReason; deviationBps?: Bps }[];
+
   marketId: MarketId;
-  method: 'RAMP_V1';
   ruleVersion: string;
   thresholdCents: UsdCents;
   expiryTs: TimestampMs;
   window: {
     startTs: TimestampMs;
     endTs: TimestampMs;
-    partitionSeconds: number; // 5
-    partitionCount: number;   // 6
+    windowMs: number;
   };
   venueInput: 'mid_price_twap';
-  venueAggregation: 'median';
-  partitionAggregation: 'median' | 'mean' | 'trimmed_mean'; // median = default; others behind a flag for comparison
-  partitions: PartitionResult[];
+  venueAggregation: 'weighted_mean_after_outlier_rejection';
+  venueTwaps: FormingResolutionVenue[];
+  weights: { venue: VenueId; weight: number }[];
+  normalizedWeights: { venue: VenueId; weight: number }[];
   resolutionPriceCents: UsdCents;
   /** 'YES' iff resolutionPriceCents > thresholdCents, else 'NO' */
   outcome: Side;
@@ -131,7 +131,6 @@ export interface RampResolution {
   dispersionState: DispersionState;
   qualityFlags: ResolutionQualityFlag[];
   sourcesUsed: VenueId[];
-  sourceUsage: { venue: VenueId; partitionsUsed: number; partitionsExcluded: number }[];
   sourcesExcluded: { venue: VenueId; reason: VenueExclusionReason; deviationBps?: Bps }[];
   /** sha256 of canonical resolution-affecting inputs — anyone can replay and verify */
   inputHash: string;

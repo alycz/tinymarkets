@@ -4,8 +4,8 @@ import {
   type DemoMode,
   type MarketConfig,
   type MarketId,
-  type RampResolution,
   type TimestampMs,
+  type VenueWeightedTwapResolution,
   timestampMs,
 } from '@jet/shared';
 import type { VenueAdapter } from './venue-adapter.js';
@@ -15,7 +15,7 @@ import { resolveMarket } from './resolve.js';
 
 type SnapshotCallback = (snapshot: IndicativeSnapshot) => void;
 
-export interface RampOracleConfig {
+export interface VenueWeightedTwapOracleConfig {
   scenario: ScenarioName;
   seed: number;
   demoMode?: DemoMode;
@@ -24,10 +24,10 @@ export interface RampOracleConfig {
 
 /**
  * Drop-in replacement for MockOracle.
- * Uses the real RAMP_V1 settlement methodology. Simulated deterministic venues are always
+ * Uses the real VENUE_WEIGHTED_TWAP_V1 settlement methodology. Simulated deterministic venues are always
  * present so demo resolution never depends solely on live APIs.
  */
-export class RampOracle {
+export class VenueWeightedTwapOracle {
   private marketId: MarketId | null = null;
   private adapters: VenueAdapter[] = [];
   private interval: ReturnType<typeof setInterval> | null = null;
@@ -38,7 +38,7 @@ export class RampOracle {
   private config: MarketConfig | null = null;
   private expiryTs: TimestampMs | null = null;
 
-  constructor(private readonly cfg: RampOracleConfig) {
+  constructor(private readonly cfg: VenueWeightedTwapOracleConfig) {
     this.scenario = cfg.scenario;
   }
 
@@ -77,7 +77,7 @@ export class RampOracle {
     return true;
   }
 
-  buildResolution(config: MarketConfig, settlementTs?: TimestampMs): RampResolution {
+  buildResolution(config: MarketConfig, settlementTs?: TimestampMs): VenueWeightedTwapResolution {
     return resolveMarket({
       config,
       adapters: this.adapters,
@@ -114,3 +114,6 @@ export class RampOracle {
     for (const cb of this.callbacks) cb(snapshot);
   }
 }
+
+export type RampOracleConfig = VenueWeightedTwapOracleConfig;
+export const RampOracle = VenueWeightedTwapOracle;
