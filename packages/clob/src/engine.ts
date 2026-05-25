@@ -145,9 +145,8 @@ export class Clob {
   cancel(orderId: OrderId): { ok: boolean; delta: OrderBookDelta } {
     const order = this.book.cancel(orderId);
     if (!order) {
-      const seq = this.nextSeq();
       const ts = timestampMs(this.now());
-      return { ok: false, delta: { marketId: this.marketId, changes: [], seq, ts } };
+      return { ok: false, delta: { marketId: this.marketId, changes: [], seq: this.seq, ts } };
     }
     const touched = new Map<TouchKey, TouchEntry>();
     const side = order.yesAction === 'BUY' ? 'BID' : 'ASK';
@@ -155,8 +154,23 @@ export class Clob {
     return { ok: true, delta: this.buildDelta(touched) };
   }
 
+  clearOpenOrders(): { orders: CanonicalOrder[]; delta: OrderBookDelta | null } {
+    const result = this.book.clear();
+    if (result.orders.length === 0) {
+      return { orders: [], delta: null };
+    }
+
+    const touched = new Map<TouchKey, TouchEntry>();
+    for (const level of result.levels) {
+      const side = level.side === 'BUY' ? 'BID' : 'ASK';
+      touched.set(`${side}:${level.yesPriceCents}`, { side, price: level.yesPriceCents });
+    }
+
+    return { orders: result.orders, delta: this.buildDelta(touched) };
+  }
+
   snapshot(): OrderBookSnapshot {
-    return this.book.snapshot(this.marketId, this.nextSeq(), this.now());
+    return this.book.snapshot(this.marketId, this.seq, this.now());
   }
 
   recentMatches(limit = 100): Match[] {
