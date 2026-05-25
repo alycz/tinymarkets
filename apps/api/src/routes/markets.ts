@@ -132,6 +132,52 @@ export function createMarketsRoutes(session: MarketSession) {
         return reply.send({ ok: true, trades });
       },
     );
+
+    fastify.get<{
+      Params: { marketId: string };
+      Querystring: { limit?: string };
+    }>(
+      '/markets/:marketId/share-price-series',
+      async (req, reply) => {
+        const marketId = validateMarketId(req.params.marketId);
+        if (!marketId.ok) {
+          return reply.status(400).send({ ok: false, error: marketId.error });
+        }
+
+        const state = session.getMarketState();
+        if (!state || state.config.marketId !== marketId.value) {
+          return reply.status(404).send({
+            ok: false,
+            error: { code: 'UNKNOWN_MARKET', message: 'Market not found' },
+          });
+        }
+        const limit = req.query.limit ? parseInt(req.query.limit, 10) : 600;
+        return reply.send({ ok: true, points: session.getSharePriceSeries(limit) });
+      },
+    );
+
+    fastify.get<{
+      Params: { marketId: string };
+      Querystring: { limit?: string };
+    }>(
+      '/markets/:marketId/oracle-series',
+      async (req, reply) => {
+        const marketId = validateMarketId(req.params.marketId);
+        if (!marketId.ok) {
+          return reply.status(400).send({ ok: false, error: marketId.error });
+        }
+
+        const state = session.getMarketState();
+        if (!state || state.config.marketId !== marketId.value) {
+          return reply.status(404).send({
+            ok: false,
+            error: { code: 'UNKNOWN_MARKET', message: 'Market not found' },
+          });
+        }
+        const limit = req.query.limit ? parseInt(req.query.limit, 10) : 600;
+        return reply.send({ ok: true, snapshots: session.getOracleSeries(limit) });
+      },
+    );
   };
 }
 

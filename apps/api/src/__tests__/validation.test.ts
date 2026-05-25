@@ -123,4 +123,47 @@ describe('REST boundary validation', () => {
     expect(invalidOrderId.statusCode).toBe(400);
     expect(invalidOrderId.json()).toMatchObject({ ok: false, error: { code: 'VALIDATION' } });
   });
+
+  it('serves share/oracle series and exact user snapshot endpoints', async () => {
+    const market = session.startDemo();
+
+    await server.inject({
+      method: 'POST',
+      url: '/orders',
+      payload: {
+        userId: 'userA',
+        marketId: market.config.marketId,
+        side: 'YES',
+        action: 'BUY',
+        type: 'LIMIT',
+        oddsPriceCents: 55,
+        size: 1,
+      },
+    });
+
+    const shareSeries = await server.inject({
+      method: 'GET',
+      url: `/markets/${market.config.marketId}/share-price-series`,
+    });
+    expect(shareSeries.statusCode).toBe(200);
+    expect(shareSeries.json()).toMatchObject({ ok: true });
+    expect(shareSeries.json().points.length).toBeGreaterThan(0);
+
+    const oracleSeries = await server.inject({
+      method: 'GET',
+      url: `/markets/${market.config.marketId}/oracle-series`,
+    });
+    expect(oracleSeries.statusCode).toBe(200);
+    expect(oracleSeries.json()).toMatchObject({ ok: true });
+    expect(oracleSeries.json().snapshots.length).toBeGreaterThan(0);
+
+    const balance = await server.inject({ method: 'GET', url: '/users/userA/balance' });
+    expect(balance.statusCode).toBe(200);
+    expect(balance.json()).toMatchObject({ ok: true, balance: { userId: 'userA' } });
+
+    const orders = await server.inject({ method: 'GET', url: '/users/userA/orders' });
+    expect(orders.statusCode).toBe(200);
+    expect(orders.json()).toMatchObject({ ok: true });
+    expect(orders.json().orders).toHaveLength(1);
+  });
 });

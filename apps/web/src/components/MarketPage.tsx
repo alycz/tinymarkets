@@ -11,6 +11,7 @@ import type {
   Position,
   CanonicalOrder,
   PriceCents,
+  SharePricePoint,
   TimestampMs,
   UserResolutionEvent,
   UsdCents,
@@ -21,6 +22,7 @@ import type { WsStatus } from '../hooks/useWebSocket.js';
 import type { PricePoint } from '../hooks/usePriceHistory.js';
 import MarketHeader from './MarketHeader.js';
 import ChartPanel from './ChartPanel.js';
+import OracleReferencePanel from './OracleReferencePanel.js';
 import TradeTicket from './TradeTicket.js';
 import AccountPanel from './AccountPanel.js';
 import OrderBookPanel from './OrderBookPanel.js';
@@ -42,7 +44,8 @@ interface Props {
   openOrders: CanonicalOrder[];
   userResolution: UserResolutionEvent | null;
   refreshUserSnapshot: () => Promise<void>;
-  priceHistory: PricePoint[];
+  oraclePriceHistory: PricePoint[];
+  sharePriceHistory: SharePricePoint[];
   userId: string;
   apiUrl: string;
   onStartNew: () => void;
@@ -75,7 +78,8 @@ export default function MarketPage({
   openOrders,
   userResolution,
   refreshUserSnapshot,
-  priceHistory,
+  oraclePriceHistory,
+  sharePriceHistory,
   userId,
   apiUrl,
   onStartNew,
@@ -102,7 +106,16 @@ export default function MarketPage({
 
   const chart = (
     <ChartPanel
-      priceHistory={priceHistory}
+      sharePriceHistory={sharePriceHistory}
+      currentPoint={sharePriceHistory.at(-1) ?? null}
+      bestBid={bestBid?.yesPriceCents ?? null}
+      bestAsk={bestAsk?.yesPriceCents ?? null}
+    />
+  );
+
+  const oracleReference = (
+    <OracleReferencePanel
+      priceHistory={oraclePriceHistory}
       thresholdCents={config.thresholdCents}
       currentPriceCents={oracleSnapshot?.btcPriceCents ?? null}
     />
@@ -165,6 +178,7 @@ export default function MarketPage({
       {narrow ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: S.md }}>
           {chart}
+          {oracleReference}
           {ticket}
           {account}
           {book}
@@ -176,6 +190,7 @@ export default function MarketPage({
           <div style={twoColStyle}>
             {chart}
             <div style={{ display: 'flex', flexDirection: 'column', gap: S.md }}>
+              {oracleReference}
               {ticket}
               {account}
             </div>

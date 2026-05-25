@@ -22,7 +22,7 @@ export function useTrades(
 
   useEffect(() => {
     if (!lastEvent || !marketId) return;
-    if (lastEvent.type === 'trade:created' && lastEvent.trade.marketId === marketId) {
+    if (lastEvent.type === 'trade' && lastEvent.trade.marketId === marketId) {
       setTrades((prev) => [lastEvent.trade, ...prev].slice(0, 50));
     }
   }, [lastEvent, marketId]);

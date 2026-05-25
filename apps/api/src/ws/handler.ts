@@ -110,7 +110,7 @@ function validateChannel(raw: string): { ok: true; channel: Channel } | { ok: fa
   const kind = raw.slice(0, idx);
   const id = raw.slice(idx + 1);
   if (!VALID_CHANNEL_KINDS.has(kind)) {
-    return invalid('channel kind must be market, book, trades, oracle, or user');
+    return invalid('channel kind must be market, book, trades, oracle, share, or user');
   }
   if (id.length === 0) {
     return invalid('channel id is required');

@@ -73,8 +73,12 @@ REST is used for commands and one-shot snapshots:
 - `GET /markets/:marketId`
 - `GET /markets/:marketId/orderbook`
 - `GET /markets/:marketId/trades`
+- `GET /markets/:marketId/share-price-series`
+- `GET /markets/:marketId/oracle-series`
 - `GET /users/:userId`
+- `GET /users/:userId/balance`
 - `GET /users/:userId/positions`
+- `GET /users/:userId/orders`
 - `POST /orders`
 - `POST /orders/:orderId/cancel`
 - `POST /markets/:marketId/oracle/demo`
@@ -86,6 +90,7 @@ WebSocket is used for all live streams at `/ws`. Clients subscribe to typed chan
 - `book:<id>`
 - `trades:<id>`
 - `oracle:<id>`
+- `share:<id>`
 - `user:<id>`
 
 Public market data and user-specific state are intentionally separate channels.
@@ -164,22 +169,23 @@ REST is not used for live polling. The client opens `/ws`, subscribes to channel
 
 Public channels:
 
-- `market:<id>` sends `market:status` and `market:resolved`.
-- `book:<id>` sends `book:snapshot` and `book:delta`.
-- `trades:<id>` sends `trade:created`.
-- `oracle:<id>` sends `oracle:price`.
+- `market:<id>` sends `market_snapshot`, `market_status`, `countdown`, and `resolution`.
+- `book:<id>` sends `orderbook_snapshot` and `orderbook_delta`.
+- `trades:<id>` sends `trade`.
+- `oracle:<id>` sends `oracle_price`.
+- `share:<id>` sends `share_price` points for YES share trades, midpoints, and marks.
 
 User channel:
 
-- `user:<id>` sends `user:balance`, `user:position`, `user:fill`, and `user:resolution`.
+- `user:<id>` sends `open_order`, `order_cancelled`, `fill`, `position_update`, `balance_update`, and `pnl_update`.
 
-On subscription, the server sends catch-up state where available. For market status it sends current status and, if already resolved, the resolution. For the book it sends a fresh snapshot. For trades it replays recent trades from the ring buffer. For oracle it sends the latest indicative snapshot. For user state it sends current balance and position.
+On subscription, the server sends catch-up state where available. For market status it sends a snapshot, current status, countdown, and, if already resolved, the resolution. For the book it sends a fresh snapshot. For trades it replays recent trades from the ring buffer. For oracle it sends the latest indicative snapshot. For share prices it replays the in-memory YES price series. For user state it sends current balance, position, and open orders.
 
 Book snapshots and deltas carry a monotonic `seq`. Mutating order-book operations advance the sequence; snapshots report the current sequence and do not consume one. The web client applies deltas only when the next sequence is exactly `current + 1`; on a gap it unsubscribes and re-subscribes to force a fresh snapshot. On WebSocket reconnect, hooks re-subscribe and receive catch-up snapshots again.
 
 Incoming WebSocket messages receive lightweight runtime validation. Invalid JSON, non-object messages, unknown message types, unsupported channels, and oversized subscription batches receive typed error events instead of mutating subscriptions. The server also uses heartbeat checks to clean up dead sockets.
 
-The server clock is authoritative. `market:status` includes `msRemaining`, `expiryMs`, and `serverTs`; the client renders those values instead of running its own market lifecycle.
+The server clock is authoritative. `market_status` and `countdown` include `msRemaining`, `expiryMs`, and `serverTs`; the client renders those values instead of running its own market lifecycle.
 
 ## 6. Bot Design
 
@@ -352,14 +358,15 @@ The production version should add real venue adapters with authenticated data ca
 The frontend is a single dense market page rather than a landing page. It prioritizes the trading loop:
 
 - Market question, strike, status, countdown, and WebSocket status at the top.
-- BTC/USD indicative chart with a toggleable strike line.
+- Primary YES share-price / implied-probability chart with current YES/NO prices and best bid/ask.
+- Compact BTC/USD oracle reference chart with the strike line.
 - Trade ticket for YES/NO BUY/SELL limit orders.
 - Account panel with available cash, reserved order funds, OI collateral share, position, average entry, and unrealized PnL.
 - YES book ladder showing YES and complementary NO prices.
 - Recent trades with side, price, size, and fill kind.
 - Oracle panel with method, final-window countdown, live indicative price, dispersion, confidence, venue health, forming resolution partitions, final resolution, quality flags, sources used/excluded, source usage, input hash, and user PnL.
 
-The chart's live price is the indicative oracle price, not the settlement price. During the final 30 seconds, the oracle snapshot can include `formingResolution`, and the panel shows the forming partition median separately. This split is intentional: users need a responsive displayed price for trading, but settlement uses the final-window benchmark.
+The primary chart's live price is the traded YES share price, not BTC/USD. The BTC/USD reference chart and oracle panel are separate because BTC is the underlying oracle input, while YES shares are the market being traded. During the final 30 seconds, the oracle snapshot can include `formingResolution`, and the panel shows the forming partition median separately; final settlement still uses the final-window benchmark, not the share chart.
 
 The main tradeoff is simplicity. The UI shows the real mechanics that exist, but avoids features the backend does not support: deposits, auth, wallet connection, persistence, fees, and production risk limits.
 

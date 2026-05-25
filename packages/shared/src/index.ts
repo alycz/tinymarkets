@@ -8,6 +8,7 @@ export * from './orders';
 export * from './trades';
 export * from './positions';
 export * from './orderbook';
+export * from './share-price';
 export * from './oracle';
 export * from './rest';
 export * from './ws';
