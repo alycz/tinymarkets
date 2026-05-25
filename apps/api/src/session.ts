@@ -189,7 +189,7 @@ export class MarketSession {
     return this.lastUserResolutions.get(userId) ?? null;
   }
 
-  resolveActiveMarket(): Result<{ resolution: RampResolution; market: MarketState }> {
+  resolveActiveMarket(): Result<{ resolution: VenueWeightedTwapResolution; market: MarketState }> {
     if (!this.config || !this.marketCore) {
       return err('UNKNOWN_MARKET', 'No active market');
     }
