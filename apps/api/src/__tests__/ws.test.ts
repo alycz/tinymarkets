@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AddressInfo } from 'node:net';
 import WebSocket from 'ws';
 import type { ServerEvent } from '@jet/shared';
-import { oddsPriceCents, shareChannel, shares, userChannel } from '@jet/shared';
+import { oddsPriceCents, shareChannel, sharePriceChannel, shares, userChannel } from '@jet/shared';
 import { buildServer } from '../server.js';
 import { Broadcaster } from '../broadcasts.js';
 import { MarketSession } from '../session.js';
@@ -124,10 +124,17 @@ describe('WebSocket protocol hardening', () => {
 
       const ws = makeFakeWs();
       manager.addConnection(ws as unknown as WebSocket);
-      manager.subscribe(ws as unknown as WebSocket, [userChannel('userA')]);
+      manager.subscribe(ws as unknown as WebSocket, [userChannel('userA', market.config.marketId)]);
 
+      expect(ws.sent.some((event) => event.type === 'balance_snapshot')).toBe(true);
+      expect(ws.sent.some((event) => event.type === 'position_snapshot')).toBe(true);
+      expect(ws.sent.some((event) => event.type === 'open_orders_snapshot')).toBe(true);
       const openOrders = ws.sent.find((event) => event.type === 'open_order');
-      expect(openOrders).toMatchObject({ type: 'open_order', userId: 'userA' });
+      expect(openOrders).toMatchObject({
+        type: 'open_order',
+        userId: 'userA',
+        marketId: market.config.marketId,
+      });
       expect(openOrders?.type === 'open_order' && openOrders.openOrders).toHaveLength(1);
     } finally {
       manager.destroy();
@@ -135,7 +142,77 @@ describe('WebSocket protocol hardening', () => {
     }
   });
 
-  it('sends a YES share-price snapshot on share channel subscribe and live increments later', () => {
+  it('keeps legacy user channel alias working during the protocol migration', () => {
+    const session = new MarketSession();
+    const manager = new WsManager({ heartbeatMs: 60_000 });
+    try {
+      manager.setSession(session);
+      const market = session.startDemo();
+      session.placeOrder({
+        userId: 'userA',
+        marketId: market.config.marketId,
+        side: 'YES',
+        action: 'BUY',
+        type: 'LIMIT',
+        oddsPriceCents: oddsPriceCents(55),
+        size: shares(10),
+        tif: 'GTC',
+      });
+
+      const ws = makeFakeWs();
+      manager.addConnection(ws as unknown as WebSocket);
+      manager.subscribe(ws as unknown as WebSocket, [userChannel('userA')]);
+
+      const openOrders = ws.sent.find((event) => event.type === 'open_order');
+      expect(openOrders).toMatchObject({
+        type: 'open_order',
+        userId: 'userA',
+        marketId: market.config.marketId,
+      });
+    } finally {
+      manager.destroy();
+      session.destroy();
+    }
+  });
+
+  it('replays YES share-price points when a share channel subscribes', () => {
+    const session = new MarketSession();
+    const manager = new WsManager({ heartbeatMs: 60_000 });
+    const broadcaster = new Broadcaster(manager);
+    try {
+      manager.setSession(session);
+      session.setBroadcaster(broadcaster);
+      const market = session.startDemo();
+      session.placeOrder({
+        userId: 'userA',
+        marketId: market.config.marketId,
+        side: 'YES',
+        action: 'BUY',
+        type: 'LIMIT',
+        oddsPriceCents: oddsPriceCents(55),
+        size: shares(10),
+        tif: 'GTC',
+      });
+
+      const ws = makeFakeWs();
+      manager.addConnection(ws as unknown as WebSocket);
+      manager.subscribe(ws as unknown as WebSocket, [sharePriceChannel(market.config.marketId)]);
+
+      const snapshot = ws.sent.find((event) => event.type === 'share_price_snapshot');
+      expect(snapshot).toMatchObject({
+        type: 'share_price_snapshot',
+        marketId: market.config.marketId,
+      });
+      const sharePoint = ws.sent.find((event) => event.type === 'share_price');
+      expect(sharePoint).toMatchObject({ type: 'share_price', marketId: market.config.marketId });
+      expect(sharePoint?.type === 'share_price' && sharePoint.point.yesPriceCents).toBeGreaterThan(0);
+    } finally {
+      manager.destroy();
+      session.destroy();
+    }
+  });
+
+  it('keeps legacy share channel alias working during the protocol migration', () => {
     const session = new MarketSession();
     const manager = new WsManager({ heartbeatMs: 60_000 });
     const broadcaster = new Broadcaster(manager);
@@ -176,9 +253,34 @@ describe('WebSocket protocol hardening', () => {
         tif: 'IOC',
       });
 
-      const livePoint = ws.sent.find((event) => event.type === 'share_price');
+      const livePoint = ws.sent.filter((event) => event.type === 'share_price').at(-1);
       expect(livePoint).toMatchObject({ type: 'share_price' });
       expect(livePoint?.type === 'share_price' && livePoint.point.yesPriceCents).toBe(55);
+    } finally {
+      manager.destroy();
+      session.destroy();
+    }
+  });
+
+  it('sends rich market snapshots on subscribe', () => {
+    const session = new MarketSession();
+    const manager = new WsManager({ heartbeatMs: 60_000 });
+    try {
+      manager.setSession(session);
+      const market = session.startDemo();
+
+      const ws = makeFakeWs();
+      manager.addConnection(ws as unknown as WebSocket);
+      manager.subscribe(ws as unknown as WebSocket, [`market:${market.config.marketId}`]);
+
+      const snapshot = ws.sent.find((event) => event.type === 'market_snapshot');
+      expect(snapshot).toMatchObject({
+        type: 'market_snapshot',
+        countdownMs: expect.any(Number),
+      });
+      expect(snapshot?.type === 'market_snapshot' && snapshot.orderbook?.marketId).toBe(market.config.marketId);
+      expect(snapshot?.type === 'market_snapshot' && Array.isArray(snapshot.recentTrades)).toBe(true);
+      expect(snapshot?.type === 'market_snapshot' && snapshot.sharePrice?.yesPriceCents).toBeGreaterThan(0);
     } finally {
       manager.destroy();
       session.destroy();

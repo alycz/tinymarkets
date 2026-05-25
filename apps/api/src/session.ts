@@ -121,7 +121,7 @@ export class MarketSession {
     this.tickInterval = setInterval(() => this.tick(), 1000);
 
     const state = this.buildMarketState();
-    this.broadcaster?.marketSnapshot(state);
+    this.broadcaster?.marketSnapshot(state, this.buildMarketSnapshotParts());
     return state;
   }
 
@@ -165,6 +165,10 @@ export class MarketSession {
   getSharePriceSeries(limit = 600): SharePricePoint[] {
     const ring = this.sharePriceSeries;
     return limit >= ring.length ? [...ring] : ring.slice(-limit);
+  }
+
+  getLatestSharePrice(): SharePricePoint | null {
+    return this.getLatestSharePricePoint();
   }
 
   getLatestSharePricePoint(): SharePricePoint | null {
@@ -421,6 +425,20 @@ export class MarketSession {
       msRemaining,
       openInterest: oi,
       ...(this.lastResolution ? { resolution: this.lastResolution } : {}),
+    };
+  }
+
+  private buildMarketSnapshotParts(): {
+    orderbook: OrderBookSnapshot | null;
+    recentTrades: Trade[];
+    oracle: IndicativeSnapshot | null;
+    sharePrice: SharePricePoint | null;
+  } {
+    return {
+      orderbook: this.getOrderBookSnapshot(),
+      recentTrades: this.getRecentTrades(),
+      oracle: this.getOracleSnapshot(),
+      sharePrice: this.getLatestSharePricePoint(),
     };
   }
 

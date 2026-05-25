@@ -167,19 +167,41 @@ This structure is better than dual YES/NO token books for the demo because it av
 
 REST is not used for live polling. The client opens `/ws`, subscribes to channels, and reduces server events into local UI state.
 
+Client messages are JSON commands:
+
+```json
+{
+  "type": "subscribe",
+  "channels": [
+    "market:btc-2m",
+    "book:btc-2m",
+    "trades:btc-2m",
+    "oracle:btc-2m",
+    "share_price:btc-2m",
+    "user:demo:btc-2m"
+  ]
+}
+```
+
+`unsubscribe` uses the same channel shape. `ping` receives `pong` with server time.
+
 Public channels:
 
-- `market:<id>` sends `market_snapshot`, `market_status`, `countdown`, and `resolution`.
+- `market:<id>` sends `market_snapshot`, `market_status`, `countdown`, and `resolution`. The snapshot includes the market, current book, recent trades, latest oracle tick, latest YES share price, and countdown.
 - `book:<id>` sends `orderbook_snapshot` and `orderbook_delta`.
-- `trades:<id>` sends `trade`.
-- `oracle:<id>` sends `oracle_price`.
-- `share:<id>` sends `share_price` points for YES share trades, midpoints, and marks.
+- `trades:<id>` sends `trades_snapshot` and `trade`.
+- `oracle:<id>` sends `oracle_series_snapshot` and `oracle_price`.
+- `share_price:<id>` sends `share_price_snapshot` and `share_price` points for YES share trades, midpoints, and marks.
 
 User channel:
 
-- `user:<id>` sends `open_order`, `order_cancelled`, `fill`, `position_update`, `balance_update`, and `pnl_update`.
+- `user:<userId>:<id>` sends `balance_snapshot`, `position_snapshot`, `open_orders_snapshot`, `open_order`, `order_cancelled`, `fill`, `position_update`, `balance_update`, and `pnl_update`.
 
-On subscription, the server sends catch-up state where available. For market status it sends a snapshot, current status, countdown, and, if already resolved, the resolution. For the book it sends a fresh snapshot. For trades it replays recent trades from the ring buffer. For oracle it sends the latest indicative snapshot. For share prices it replays the in-memory YES price series. For user state it sends current balance, position, and open orders.
+For migration compatibility, the server also accepts the legacy aliases `share:<id>` and `user:<userId>`.
+
+BTC/USD oracle price and YES share price are separate streams. `oracle_price` carries the underlying BTC/USD input used by the oracle and resolution. `share_price` carries the traded prediction-market YES price in cents from 1 to 99; NO is always `100 - YES`.
+
+On subscription, the server sends catch-up state where available. For market status it sends a rich snapshot, current status, countdown, and, if already resolved, the resolution. For the book it sends a fresh snapshot. For trades, oracle history, and share prices it sends snapshot events. For user state it sends current balance, position, and open orders. After those snapshots, clients reduce deltas and events.
 
 Book snapshots and deltas carry a monotonic `seq`. Mutating order-book operations advance the sequence; snapshots report the current sequence and do not consume one. The web client applies deltas only when the next sequence is exactly `current + 1`; on a gap it unsubscribes and re-subscribes to force a fresh snapshot. On WebSocket reconnect, hooks re-subscribe and receive catch-up snapshots again.
 

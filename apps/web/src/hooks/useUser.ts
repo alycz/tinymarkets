@@ -55,9 +55,9 @@ export function useUser(
   }, [userId, marketId]);
 
   useEffect(() => {
-    if (!userId || wsStatus !== 'connected') return;
-    send({ type: 'subscribe', channels: [userChannel(userId)] });
-  }, [userId, wsStatus, send]);
+    if (!userId || !marketId || wsStatus !== 'connected') return;
+    send({ type: 'subscribe', channels: [userChannel(userId, marketId)] });
+  }, [userId, marketId, wsStatus, send]);
 
   useEffect(() => {
     if (!userId || !marketId) return;
@@ -67,22 +67,30 @@ export function useUser(
   useEffect(() => {
     if (!lastEvent) return;
     switch (lastEvent.type) {
+      case 'balance_snapshot':
       case 'balance_update':
-        if (lastEvent.balance.userId === userId) setBalance(lastEvent.balance);
+        if (lastEvent.userId === userId && lastEvent.marketId === marketId) setBalance(lastEvent.balance);
         break;
+      case 'position_snapshot':
       case 'position_update':
-        if (lastEvent.position.userId === userId && lastEvent.position.marketId === marketId) {
+        if (
+          lastEvent.userId === userId &&
+          lastEvent.marketId === marketId &&
+          lastEvent.position.userId === userId &&
+          lastEvent.position.marketId === marketId
+        ) {
           setPosition(lastEvent.position);
         }
         break;
+      case 'open_orders_snapshot':
       case 'open_order':
-        if (lastEvent.userId === userId) setOpenOrders(lastEvent.openOrders);
+        if (lastEvent.userId === userId && lastEvent.marketId === marketId) setOpenOrders(lastEvent.openOrders);
         break;
       case 'order_cancelled':
-        if (lastEvent.userId === userId) setOpenOrders(lastEvent.openOrders);
+        if (lastEvent.userId === userId && lastEvent.marketId === marketId) setOpenOrders(lastEvent.openOrders);
         break;
       case 'fill':
-        if (lastEvent.fill.userId === userId)
+        if (lastEvent.userId === userId && lastEvent.marketId === marketId)
           setRecentFills((prev) => [lastEvent.fill, ...prev].slice(0, 50));
         break;
       case 'pnl_update':

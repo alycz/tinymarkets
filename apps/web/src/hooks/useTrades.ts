@@ -22,6 +22,10 @@ export function useTrades(
 
   useEffect(() => {
     if (!lastEvent || !marketId) return;
+    if (lastEvent.type === 'trades_snapshot' && lastEvent.marketId === marketId) {
+      setTrades([...lastEvent.trades].reverse().slice(0, 50));
+      return;
+    }
     if (lastEvent.type === 'trade' && lastEvent.trade.marketId === marketId) {
       setTrades((prev) => [lastEvent.trade, ...prev].slice(0, 50));
     }
