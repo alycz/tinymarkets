@@ -4,6 +4,9 @@ This repo is provider-agnostic. Host the web app as static Vite output, and host
 the API as a long-running Node process on a platform that supports WebSocket
 upgrades.
 
+Local development does not require env exports. The values below are for hosted
+or non-local deployments.
+
 ## Backend
 
 Use Render, Railway, Fly, or another WS-capable host.
@@ -21,10 +24,16 @@ Backend env:
 PORT=<provided by host>
 HOST=0.0.0.0
 CORS_ORIGIN=https://web.example.com
+DEMO_MODE=simulated
 ```
 
 Set `CORS_ORIGIN` to the deployed frontend origin. Multiple origins are allowed
 as a comma-separated list.
+
+`DEMO_MODE=simulated` is the implemented default. `DEMO_MODE=live` and
+`DEMO_MODE=hybrid` are accepted for future compatibility, but currently retain
+the deterministic simulated adapters so hosted demos remain reliable. Real live
+exchange adapters are production/future work.
 
 Health check:
 

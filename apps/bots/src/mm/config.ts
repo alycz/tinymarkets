@@ -12,8 +12,8 @@ export interface MmConfig {
 
 export function loadConfig(): MmConfig {
   return {
-    apiBaseUrl: readUrlEnv('API_BASE_URL', ['http:', 'https:']),
-    wsUrl: readUrlEnv('WS_URL', ['ws:', 'wss:']),
+    apiBaseUrl: readUrlEnv('API_BASE_URL', ['http:', 'https:'], 'http://localhost:3001'),
+    wsUrl: readUrlEnv('WS_URL', ['ws:', 'wss:'], 'ws://localhost:3001/ws'),
     botUserId: process.env['BOT_USER_ID'] ?? 'mm-bot',
     levels: parseInt(process.env['LEVELS'] ?? '5', 10),
     sizePerLevel: parseInt(process.env['SIZE_PER_LEVEL'] ?? '20', 10),
@@ -24,11 +24,8 @@ export function loadConfig(): MmConfig {
   };
 }
 
-function readUrlEnv(name: 'API_BASE_URL' | 'WS_URL', protocols: string[]): string {
-  const raw = process.env[name];
-  if (!raw) {
-    throw new Error(`${name} is required`);
-  }
+function readUrlEnv(name: 'API_BASE_URL' | 'WS_URL', protocols: string[], fallback: string): string {
+  const raw = process.env[name] ?? fallback;
 
   const normalized = raw.replace(/\/+$/, '');
   let url: URL;

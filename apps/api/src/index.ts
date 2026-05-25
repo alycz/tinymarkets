@@ -5,7 +5,7 @@ import { WsManager } from './ws/manager.js';
 import type { DemoMode } from '@jet/shared';
 
 const HOST = process.env['HOST'] ?? '0.0.0.0';
-const PORT = requirePort();
+const PORT = readPort();
 const DEMO_MODE = readDemoMode();
 
 const session = new MarketSession({ demoMode: DEMO_MODE });
@@ -34,11 +34,8 @@ function readDemoMode(): DemoMode {
 process.on('SIGTERM', () => void shutdown());
 process.on('SIGINT', () => void shutdown());
 
-function requirePort(): number {
-  const raw = process.env['PORT'];
-  if (!raw) {
-    throw new Error('PORT is required');
-  }
+function readPort(): number {
+  const raw = process.env['PORT'] ?? '3001';
   const port = parseInt(raw, 10);
   if (!Number.isInteger(port) || port <= 0 || port > 65_535) {
     throw new Error(`PORT must be an integer from 1 to 65535, got ${raw}`);
