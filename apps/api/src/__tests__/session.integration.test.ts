@@ -223,6 +223,90 @@ describe('MarketSession integration', () => {
     }
   });
 
+  it('keeps non-crossing BUY YES open but fills crossing BUY YES and BUY NO immediately', () => {
+    session.startDemo();
+    const marketId = session.getMarketId()!;
+
+    session.placeOrder({
+      userId: 'asker' as UserId,
+      marketId,
+      intent: 'SELL_YES',
+      price: oddsPriceCents(60),
+      type: 'LIMIT',
+      size: shares(10),
+      tif: 'GTC',
+    });
+
+    const restingBid = session.placeOrder({
+      userId: 'patient-buyer' as UserId,
+      marketId,
+      intent: 'BUY_YES',
+      price: oddsPriceCents(55),
+      type: 'LIMIT',
+      size: shares(4),
+      tif: 'GTC',
+    });
+    expect(restingBid.ok).toBe(true);
+    if (!restingBid.ok) throw new Error('expected resting bid to be accepted');
+    expect(restingBid.fills).toHaveLength(0);
+    expect(restingBid.remainingOpenOrder?.remaining).toBe(4);
+    expect(session.getUserSnapshot('patient-buyer' as UserId)!.openOrders).toHaveLength(1);
+
+    const crossingBuyYes = session.placeOrder({
+      userId: 'crossing-yes',
+      marketId,
+      intent: 'BUY_YES',
+      price: oddsPriceCents(60),
+      type: 'LIMIT',
+      size: shares(6),
+      tif: 'GTC',
+    });
+    expect(crossingBuyYes.ok).toBe(true);
+    if (!crossingBuyYes.ok) throw new Error('expected crossing BUY YES to fill');
+    expect(crossingBuyYes.fills).toHaveLength(1);
+    expect(crossingBuyYes.remainingOpenOrder).toBeUndefined();
+    expect(session.getUserSnapshot('crossing-yes' as UserId)!.positions[0]!.net).toBe(6);
+    expect(session.getUserSnapshot('crossing-yes' as UserId)!.openOrders).toHaveLength(0);
+    expect(session.getSharePriceSeries().at(-2)).toMatchObject({
+      source: 'trade',
+      yesPriceCents: 60,
+      noPriceCents: 40,
+    });
+
+    session.startDemo();
+    const noMarketId = session.getMarketId()!;
+    session.placeOrder({
+      userId: 'bidder-for-no',
+      marketId: noMarketId,
+      intent: 'BUY_YES',
+      price: oddsPriceCents(62),
+      type: 'LIMIT',
+      size: shares(5),
+      tif: 'GTC',
+    });
+    const crossingBuyNo = session.placeOrder({
+      userId: 'crossing-no',
+      marketId: noMarketId,
+      intent: 'BUY_NO',
+      price: oddsPriceCents(38),
+      type: 'LIMIT',
+      size: shares(5),
+      tif: 'GTC',
+    });
+
+    expect(crossingBuyNo.ok).toBe(true);
+    if (!crossingBuyNo.ok) throw new Error('expected crossing BUY NO to fill');
+    expect(crossingBuyNo.order.yesAction).toBe('SELL');
+    expect(crossingBuyNo.order.yesPriceCents).toBe(62);
+    expect(crossingBuyNo.fills).toHaveLength(1);
+    expect(crossingBuyNo.remainingOpenOrder).toBeUndefined();
+    expect(session.getUserSnapshot('crossing-no' as UserId)!.positions[0]!.net).toBe(-5);
+    expect(session.getRecentTrades(1)[0]).toMatchObject({
+      yesPriceCents: 62,
+      size: 5,
+    });
+  });
+
   it('records mid and mark share-price points from the YES book without using oracle prices', () => {
     session.startDemo();
     const marketId = session.getMarketId()!;

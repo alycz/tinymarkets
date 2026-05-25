@@ -1,8 +1,8 @@
 import { shares } from '@jet/shared';
 import type { CanonicalOrder, PriceCents } from '@jet/shared';
-import type { ApiClient } from './api-client.js';
+import type { ApiClient } from '../lib/api-client.js';
 import type { MmConfig } from './config.js';
-import { buildLevelSpecs, buildQuoteLadder, dynamicSpreadCents } from './pricing.js';
+import { buildLevelSpecs, buildQuoteLadder, dynamicSpreadCents } from '../lib/pricing.js';
 
 type QuoteSide = 'BID' | 'ASK';
 

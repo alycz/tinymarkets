@@ -18,9 +18,15 @@ Run this before handing off the repo.
 - Market maker quotes both sides of the book.
 - Takers create recent trade flow.
 - User can place YES and NO orders.
+- BUY YES below the ask rests as an open order.
+- BUY YES at or above the ask fills immediately.
+- BUY NO crosses by complement logic through the canonical YES book, not a separate NO book.
 - Trades, fills, balance, reserved funds, signed position, and PnL update.
+- YES share-price chart remains in the 1-99 cent range and is visually separate from the BTC/oracle reference chart.
+- Recent trades come from CLOB fills, not synthetic bot writes.
 - `Arm Spike Demo` works.
 - `Arm Subtle Demo` works.
+- At expiry, trading is disabled, open orders are cancelled, and bots stop until a new market opens.
 - Final resolution shows outcome, reference price, payout, realized PnL, sources used/excluded, per-venue TWAPs, normalized weights, quality flags, and input hash.
 
 ## Documentation Verification
@@ -28,5 +34,6 @@ Run this before handing off the repo.
 - `README.md` gives a clear reviewer quickstart.
 - `docs/DEMO_SCRIPT.md` describes the intended click path.
 - `docs/DESIGN.md` explains `VENUE_WEIGHTED_TWAP_V1` deeply and matches the code.
+- `BUILD_PLAN.md` is treated as historical context where it conflicts with `VENUE_WEIGHTED_TWAP_V1`.
 - `DEPLOY.md` separates hosted env requirements from local defaults.
 - Known simplifications are explicit and framed as local-demo tradeoffs.

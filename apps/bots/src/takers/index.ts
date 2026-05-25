@@ -5,8 +5,8 @@ import {
   oddsPriceCents,
 } from '@jet/shared';
 import type { MarketState, PriceCents, UsdCents } from '@jet/shared';
-import { ApiClient } from '../mm/api-client.js';
-import { fairYesProbCents } from '../mm/pricing.js';
+import { ApiClient } from '../lib/api-client.js';
+import { fairYesProbCents } from '../lib/pricing.js';
 import { BookTracker } from './book-tracker.js';
 import { loadConfig } from './config.js';
 import type { TakersConfig } from './config.js';

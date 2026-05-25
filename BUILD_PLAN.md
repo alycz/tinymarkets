@@ -2,6 +2,11 @@
 
 > Living document. We work against this for the rest of the trial.
 > Status: decisions locked, ready to build on approval.
+>
+> Historical note: the implemented demo and submission docs now use
+> `VENUE_WEIGHTED_TWAP_V1` as the source-of-truth oracle method. Older
+> `RAMP_V1` references below are retained as planning context only where they
+> conflict with `README.md`, `docs/DESIGN.md`, or the oracle package.
 
 ---
 

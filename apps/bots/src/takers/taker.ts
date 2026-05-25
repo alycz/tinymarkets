@@ -1,5 +1,5 @@
 import type { MarketId, PlaceOrderRequest, PriceCents } from '@jet/shared';
-import type { ApiClient } from '../mm/api-client.js';
+import type { ApiClient } from '../lib/api-client.js';
 import type { TakersConfig } from './config.js';
 import { decide, isCrossedBook } from './decide.js';
 import type { BestPrices } from './book-tracker.js';
