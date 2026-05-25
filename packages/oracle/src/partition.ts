@@ -9,12 +9,17 @@ import {
   usdCents,
 } from '@jet/shared';
 import type { ORACLE } from '@jet/config';
-import { computeMad, computeMedian } from './math.js';
+import {
+  computeMad,
+  computeMedian,
+  roundMillicentsToCentsHalfUp,
+  type UsdMillicents,
+} from './math.js';
 import { spreadTwap } from './twap.js';
 
 export interface PartitionVenueData {
   /** Stair-step TWAP of (bid+ask)/2 over the partition; null if venue has no live quote. */
-  twap: UsdCents | null;
+  twap: UsdMillicents | null;
   /** All venue quotes up to partitionEnd (for spread/crossed-book checks + fill-from-start). */
   allSamples: VenueQuote[];
   /** Result of adapter.latestAt(partitionEnd) — used for STALE gate. */
@@ -28,7 +33,8 @@ export interface ExclusionRecord {
 }
 
 export interface AggPartitionResult {
-  priceCents: UsdCents;
+  btcPriceMillicents: UsdMillicents;
+  btcPriceCents: UsdCents;
   validVenues: number;
   excludedVenues: number;
   exclusions: ExclusionRecord[];
@@ -110,12 +116,13 @@ export function aggregatePartition(
   }
 
   const survivorValues = [...survivors.values()];
-  const priceCents = survivorValues.length > 0
-    ? usdCents(computeMedian(survivorValues))
-    : usdCents(crossVenueMedian > 0 ? crossVenueMedian : 0);
+  const btcPriceMillicents = survivorValues.length > 0
+    ? computeMedian(survivorValues)
+    : crossVenueMedian > 0 ? crossVenueMedian : 0;
 
   return {
-    priceCents,
+    btcPriceMillicents,
+    btcPriceCents: usdCents(roundMillicentsToCentsHalfUp(btcPriceMillicents)),
     validVenues: survivors.size,
     excludedVenues: exclusions.length,
     exclusions,

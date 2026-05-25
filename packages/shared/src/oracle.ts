@@ -34,6 +34,7 @@ export type VenueExclusionReason =
 export type DispersionState = 'NORMAL' | 'ELEVATED' | 'STRESSED' | 'DISLOCATED';
 
 export type ConfidenceLevel = 'HIGH' | 'MEDIUM' | 'LOW';
+export type DemoMode = 'simulated' | 'live' | 'hybrid';
 
 /** Per-venue health for the transparency panel. Drives include/exclude — NEVER weighting. */
 export interface VenueHealth {
@@ -54,7 +55,7 @@ export interface VenueHealth {
  */
 export interface IndicativeSnapshot {
   marketId: MarketId;
-  priceCents: UsdCents;
+  btcPriceCents: UsdCents;
   /** OUTPUT-only confidence band, derived from dispersion + venue count */
   confidenceBps: Bps;
   confidence: ConfidenceLevel;
@@ -72,7 +73,7 @@ export interface PartitionResult {
   startTs: TimestampMs;
   endTs: TimestampMs;
   /** equal-weight median of surviving venues' mid-price TWAPs for this slice */
-  priceCents: UsdCents;
+  btcPriceCents: UsdCents;
   validVenues: number;
   excludedVenues: number;
 }

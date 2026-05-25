@@ -3,11 +3,10 @@ import type {
   Match, Position, Side, Trade,
 } from '@jet/shared';
 import type { PriceCents, Shares, TimestampMs, UsdCents, UserId } from '@jet/shared';
-import { priceCents, shares, signedShares, timestampMs, usdCents } from '@jet/shared';
+import { oddsPriceCents, shares, signedShares, timestampMs, usdCents } from '@jet/shared';
 import { MARKET } from '@jet/config';
-import { classifyKind, splitMatch } from './classify';
+import { splitMatch } from './classify';
 import { applySegment } from './applyMatch';
-import { markToMarket } from './mtm';
 import { settle } from './resolve';
 import type { ResolveResult } from './resolve';
 
@@ -35,10 +34,36 @@ export class MarketCore {
   getBalance(userId: UserId): Balance {
     let bal = this.balances.get(userId);
     if (!bal) {
-      bal = { userId, availableCents: this.startingBalanceCents, lockedCents: usdCents(0) };
+      bal = {
+        userId,
+        availableBalanceCents: this.startingBalanceCents,
+        reservedForOrdersCents: usdCents(0),
+        lockedSettlementCollateralCents: usdCents(0),
+        realizedPnlCents: 0,
+      };
       this.balances.set(userId, bal);
     }
     return bal;
+  }
+
+  reserveForOrder(userId: UserId, amount: UsdCents): boolean {
+    const bal = this.getBalance(userId);
+    const cents = amount as number;
+    if ((bal.availableBalanceCents as number) < cents) return false;
+    bal.availableBalanceCents = usdCents((bal.availableBalanceCents as number) - cents);
+    bal.reservedForOrdersCents = usdCents((bal.reservedForOrdersCents as number) + cents);
+    return true;
+  }
+
+  releaseOrderReserve(userId: UserId, amount: UsdCents): void {
+    const bal = this.getBalance(userId);
+    const cents = amount as number;
+    if (cents <= 0) return;
+    if ((bal.reservedForOrdersCents as number) < cents) {
+      throw new Error(`Cannot release ${cents}c reserve for ${userId}: only ${bal.reservedForOrdersCents}c reserved`);
+    }
+    bal.reservedForOrdersCents = usdCents((bal.reservedForOrdersCents as number) - cents);
+    bal.availableBalanceCents = usdCents((bal.availableBalanceCents as number) + cents);
   }
 
   getPosition(userId: UserId): Position {
@@ -48,7 +73,7 @@ export class MarketCore {
         userId,
         marketId: this.config.marketId,
         net: signedShares(0),
-        avgEntryPriceCents: priceCents(50),
+        avgEntryPriceCents: oddsPriceCents(50),
       };
       this.positions.set(userId, pos);
     }
@@ -116,9 +141,7 @@ export class MarketCore {
 
     this.oi += oiDelta;
     this.lastPrice = match.yesPriceCents;
-
-    // MTM: recompute lockedCents for all holders at the new price
-    markToMarket(this.positions, this.balances, match.yesPriceCents);
+    this.recomputeSettlementCollateral();
 
     const firstKind = segments[0]!.kind;
     const trade: Trade = {
@@ -144,7 +167,14 @@ export class MarketCore {
     this.status = 'resolved';
     this.resolvedResult = settle(outcome, this.positions, this.balances, this.startingBalanceCents);
     this.oi = 0;
-    this.lastPrice = priceCents(outcome === 'YES' ? 99 : 1);
+    this.lastPrice = oddsPriceCents(outcome === 'YES' ? 99 : 1);
     return this.resolvedResult;
+  }
+
+  private recomputeSettlementCollateral(): void {
+    for (const [userId, pos] of this.positions) {
+      const bal = this.getBalance(userId);
+      bal.lockedSettlementCollateralCents = usdCents(Math.abs(pos.net as number) * 50);
+    }
   }
 }

@@ -24,7 +24,7 @@ function req(
     type: 'LIMIT',
     side,
     action,
-    priceCents: price as PriceCents,
+    oddsPriceCents: price as PriceCents,
     size: size as Shares,
     tif,
   };
@@ -41,27 +41,27 @@ function makeClob(): Clob {
 describe('normalize mapping', () => {
   const idGen = makeIdGen(1);
 
-  it('YES BUY -> BUY bid at priceCents', () => {
+  it('YES BUY -> BUY bid at oddsPriceCents', () => {
     const o = normalize(req('YES', 'BUY', 60, 10), idGen, 0);
     expect(o.yesAction).toBe('BUY');
     expect(o.yesPriceCents).toBe(60);
-    expect(o.display).toEqual({ side: 'YES', action: 'BUY', priceCents: 60 });
+    expect(o.display).toEqual({ side: 'YES', action: 'BUY', oddsPriceCents: 60 });
   });
 
-  it('YES SELL -> SELL ask at priceCents', () => {
+  it('YES SELL -> SELL ask at oddsPriceCents', () => {
     const o = normalize(req('YES', 'SELL', 60, 10), idGen, 0);
     expect(o.yesAction).toBe('SELL');
     expect(o.yesPriceCents).toBe(60);
   });
 
-  it('NO BUY -> SELL ask at 100 - priceCents', () => {
+  it('NO BUY -> SELL ask at 100 - oddsPriceCents', () => {
     const o = normalize(req('NO', 'BUY', 40, 10), idGen, 0);
     expect(o.yesAction).toBe('SELL');
     expect(o.yesPriceCents).toBe(60);
-    expect(o.display).toEqual({ side: 'NO', action: 'BUY', priceCents: 40 });
+    expect(o.display).toEqual({ side: 'NO', action: 'BUY', oddsPriceCents: 40 });
   });
 
-  it('NO SELL -> BUY bid at 100 - priceCents', () => {
+  it('NO SELL -> BUY bid at 100 - oddsPriceCents', () => {
     const o = normalize(req('NO', 'SELL', 40, 10), idGen, 0);
     expect(o.yesAction).toBe('BUY');
     expect(o.yesPriceCents).toBe(60);
@@ -71,10 +71,10 @@ describe('normalize mapping', () => {
     const o = normalize(req('NO', 'BUY', 35, 5), idGen, 0);
     expect(o.display.side).toBe('NO');
     expect(o.display.action).toBe('BUY');
-    expect(o.display.priceCents).toBe(35);
+    expect(o.display.oddsPriceCents).toBe(35);
   });
 
-  it('throws on invalid priceCents', () => {
+  it('throws on invalid oddsPriceCents', () => {
     expect(() => normalize(req('YES', 'BUY', 0, 10), idGen, 0)).toThrow();
     expect(() => normalize(req('YES', 'BUY', 100, 10), idGen, 0)).toThrow();
   });

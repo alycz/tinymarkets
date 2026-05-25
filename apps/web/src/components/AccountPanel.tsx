@@ -11,8 +11,9 @@ interface Props {
 }
 
 export default function AccountPanel({ balance, position, contractMidCents }: Props) {
-  const available = balance?.availableCents ?? (MARKET.startingBalanceCents as UsdCents);
-  const locked = balance?.lockedCents ?? (0 as UsdCents);
+  const available = balance?.availableBalanceCents ?? (MARKET.startingBalanceCents as UsdCents);
+  const reserved = balance?.reservedForOrdersCents ?? (0 as UsdCents);
+  const locked = balance?.lockedSettlementCollateralCents ?? (0 as UsdCents);
 
   const net = position?.net ?? 0;
   const avgEntry = position?.avgEntryPriceCents ?? null;
@@ -28,7 +29,8 @@ export default function AccountPanel({ balance, position, contractMidCents }: Pr
   return (
     <Panel title="Account">
       <Row label="Available" value={formatUsdCents(available)} />
-      <Row label="Locked" value={formatUsdCents(locked)} dim />
+      <Row label="Reserved orders" value={formatUsdCents(reserved)} dim />
+      <Row label="Settlement collateral" value={formatUsdCents(locked)} dim />
       <div style={{ height: 1, background: C.border, margin: `${S.sm}px 0` }} />
       <Row
         label="Position"

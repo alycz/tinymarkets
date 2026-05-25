@@ -63,8 +63,8 @@ export function applySegment(params: ApplySegmentParams): ApplySegmentResult {
       break;
   }
 
-  buyerBalance.availableCents = usdCents((buyerBalance.availableCents as number) + buyerDeltaAvail);
-  sellerBalance.availableCents = usdCents((sellerBalance.availableCents as number) + sellerDeltaAvail);
+  buyerBalance.availableBalanceCents = usdCents((buyerBalance.availableBalanceCents as number) + buyerDeltaAvail);
+  sellerBalance.availableBalanceCents = usdCents((sellerBalance.availableBalanceCents as number) + sellerDeltaAvail);
 
   // Capture pre-trade nets for avg entry and realized PnL calculation
   const buyerPreNet = buyerPosition.net as number;
@@ -104,6 +104,9 @@ export function applySegment(params: ApplySegmentParams): ApplySegmentResult {
     sellerRealizedDelta = (p - (sellerPosition.avgEntryPriceCents as number)) * n;
   }
 
+  buyerBalance.realizedPnlCents += buyerRealizedDelta;
+  sellerBalance.realizedPnlCents += sellerRealizedDelta;
+
   const buyerFill: Fill = {
     tradeId,
     orderId: buyerOrderId,
@@ -113,7 +116,7 @@ export function applySegment(params: ApplySegmentParams): ApplySegmentResult {
     size,
     kind,
     positionAfter: buyerPosition.net,
-    balanceAfter: buyerBalance.availableCents,
+    balanceAfter: buyerBalance.availableBalanceCents,
     ts,
   };
 
@@ -126,7 +129,7 @@ export function applySegment(params: ApplySegmentParams): ApplySegmentResult {
     size,
     kind,
     positionAfter: sellerPosition.net,
-    balanceAfter: sellerBalance.availableCents,
+    balanceAfter: sellerBalance.availableBalanceCents,
     ts,
   };
 

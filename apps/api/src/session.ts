@@ -2,6 +2,7 @@ import { MARKET } from '@jet/config';
 import {
   type CanonicalOrder,
   type DemoSpikeResponse,
+  type DemoMode,
   type Fill,
   type IndicativeSnapshot,
   type MarketConfig,
@@ -30,6 +31,7 @@ import type { Broadcaster } from './broadcasts.js';
 type OkResult<T> = { ok: true } & T;
 type ErrResult = { ok: false; error: ApiError };
 type Result<T> = OkResult<T> | ErrResult;
+type OrderReserve = { userId: UserId; centsPerShare: number; remainingCents: number };
 
 function err(code: ApiError['code'], message: string): ErrResult {
   return { ok: false, error: { code, message } };
@@ -49,15 +51,17 @@ export class MarketSession {
 
   private tradeRing: Trade[] = [];
   private readonly tradeRingCap = 100;
+  private orderReserves = new Map<OrderId, OrderReserve>();
 
   private knownUsers = new Set<UserId>();
   private lastResolution: RampResolution | null = null;
   private broadcaster: Broadcaster | null = null;
 
-  constructor(opts?: { oracleScenario?: ScenarioName; seed?: number }) {
+  constructor(opts?: { oracleScenario?: ScenarioName; seed?: number; demoMode?: DemoMode }) {
     this.oracle = new RampOracle({
       scenario: opts?.oracleScenario ?? 'HONEST',
       seed: opts?.seed ?? 12345,
+      demoMode: opts?.demoMode ?? 'simulated',
     });
 
     this.oracle.onSnapshot((snap) => {
@@ -89,6 +93,7 @@ export class MarketSession {
     this.expiryMs = expiry;
     this.openedAtMs = now;
     this.tradeRing = [];
+    this.orderReserves = new Map();
     this.knownUsers = new Set();
     this.lastResolution = null;
 
@@ -107,6 +112,7 @@ export class MarketSession {
     this.expiryMs = null;
     this.openedAtMs = null;
     this.config = null;
+    this.orderReserves = new Map();
   }
 
   getMarketId(): MarketId | null {
@@ -174,7 +180,37 @@ export class MarketSession {
       return err('MARKET_NOT_OPEN', `Market is ${this.status ?? 'not started'}`);
     }
 
-    const { order, matches, delta } = this.clob.placeOrder(req);
+    const centsPerShare = orderReserveCentsPerShare(req);
+    const totalReserveCents = centsPerShare * (req.size as number);
+    if (!this.marketCore.reserveForOrder(req.userId, usdCents(totalReserveCents))) {
+      return err('INSUFFICIENT_BALANCE', 'Insufficient available balance for order reserve');
+    }
+
+    let placed: ReturnType<Clob['placeOrder']>;
+    try {
+      placed = this.clob.placeOrder(req);
+    } catch (error) {
+      this.marketCore.releaseOrderReserve(req.userId, usdCents(totalReserveCents));
+      throw error;
+    }
+
+    const { order, matches, delta } = placed;
+    const remainingReserveCents =
+      order.status === 'OPEN' || order.status === 'PARTIALLY_FILLED'
+        ? centsPerShare * (order.remaining as number)
+        : 0;
+    const releasedReserveCents = totalReserveCents - remainingReserveCents;
+    if (releasedReserveCents > 0) {
+      this.marketCore.releaseOrderReserve(req.userId, usdCents(releasedReserveCents));
+    }
+    if (remainingReserveCents > 0) {
+      this.orderReserves.set(order.orderId, {
+        userId: req.userId,
+        centsPerShare,
+        remainingCents: remainingReserveCents,
+      });
+    }
+
     this.broadcaster?.bookDelta(delta);
 
     const now = timestampMs(Date.now());
@@ -182,6 +218,7 @@ export class MarketSession {
     const affectedUsers = new Set<UserId>();
 
     for (const match of matches) {
+      this.releaseMakerReserveForMatch(match.makerOrderId, match.size as number);
       const { trade, fills } = this.marketCore.applyMatch(match, now);
       this.pushTrade(trade);
       this.broadcaster?.trade(trade);
@@ -209,7 +246,7 @@ export class MarketSession {
   }
 
   cancelOrder(orderId: OrderId, userId: UserId): Result<{ orderId: OrderId }> {
-    if (!this.clob || !this.config) {
+    if (!this.clob || !this.config || !this.marketCore) {
       return err('UNKNOWN_MARKET', 'No active market');
     }
 
@@ -226,6 +263,7 @@ export class MarketSession {
       return err('UNKNOWN_ORDER', 'Order not found');
     }
 
+    this.releaseOrderReserve(orderId);
     this.broadcaster?.bookDelta(delta);
     return { ok: true, orderId };
   }
@@ -301,7 +339,7 @@ export class MarketSession {
         marketId: this.config.marketId,
         outcome: resolution.outcome,
         netAtResolution,
-        payoutCents: usdCents(Math.max(0, bal.availableCents as number)),
+        payoutCents: usdCents(Math.max(0, bal.availableBalanceCents as number)),
         pnlCents,
       });
       this.broadcaster?.userBalance(userId, bal);
@@ -322,4 +360,28 @@ export class MarketSession {
       this.resolveTimeout = null;
     }
   }
+
+  private releaseMakerReserveForMatch(orderId: OrderId, size: number): void {
+    const reserve = this.orderReserves.get(orderId);
+    if (!reserve || !this.marketCore) return;
+    const releaseCents = Math.min(reserve.remainingCents, reserve.centsPerShare * size);
+    if (releaseCents <= 0) return;
+    this.marketCore.releaseOrderReserve(reserve.userId, usdCents(releaseCents));
+    reserve.remainingCents -= releaseCents;
+    if (reserve.remainingCents <= 0) {
+      this.orderReserves.delete(orderId);
+    }
+  }
+
+  private releaseOrderReserve(orderId: OrderId): void {
+    const reserve = this.orderReserves.get(orderId);
+    if (!reserve || !this.marketCore) return;
+    this.marketCore.releaseOrderReserve(reserve.userId, usdCents(reserve.remainingCents));
+    this.orderReserves.delete(orderId);
+  }
+}
+
+function orderReserveCentsPerShare(req: PlaceOrderRequest): number {
+  const odds = req.oddsPriceCents as number;
+  return req.action === 'BUY' ? odds : 100 - odds;
 }

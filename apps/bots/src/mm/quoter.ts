@@ -7,11 +7,11 @@ import { buildQuoteLadder } from './pricing.js';
 interface TrackedOrder {
   orderId: string;
   side: 'BID' | 'ASK';
-  priceCents: PriceCents;
+  oddsPriceCents: PriceCents;
 }
 
 export class Quoter {
-  // Keyed by "BID:<priceCents>" or "ASK:<priceCents>"
+  // Keyed by "BID:<oddsPriceCents>" or "ASK:<oddsPriceCents>"
   private readonly orders = new Map<string, TrackedOrder>();
   private marketId = '';
 
@@ -38,7 +38,7 @@ export class Quoter {
 
     const { levels, halfSpreadCents, levelStepCents, sizePerLevel, botUserId } = this.config;
     const targetLadder = buildQuoteLadder(fairCents, halfSpreadCents, levels, levelStepCents, sizePerLevel);
-    const targetKeys = new Set(targetLadder.map(l => `${l.side}:${l.priceCents}`));
+    const targetKeys = new Set(targetLadder.map(l => `${l.side}:${l.oddsPriceCents}`));
 
     // Cancel stale orders (not in the new target ladder)
     await Promise.all(
@@ -58,16 +58,16 @@ export class Quoter {
     // Place orders missing from our tracking
     await Promise.all(
       targetLadder
-        .filter(level => !this.orders.has(`${level.side}:${level.priceCents}`))
+        .filter(level => !this.orders.has(`${level.side}:${level.oddsPriceCents}`))
         .map(level => {
-          const key = `${level.side}:${level.priceCents}`;
+          const key = `${level.side}:${level.oddsPriceCents}`;
           return this.api.placeOrder({
             userId: botUserId,
             marketId: this.marketId,
             side: 'YES',
             action: level.side === 'BID' ? 'BUY' : 'SELL',
             type: 'LIMIT',
-            priceCents: level.priceCents,
+            oddsPriceCents: level.oddsPriceCents,
             size: shares(level.size),
             tif: 'GTC',
           })
@@ -76,7 +76,7 @@ export class Quoter {
                 this.orders.set(key, {
                   orderId: res.order.orderId,
                   side: level.side,
-                  priceCents: level.priceCents,
+                  oddsPriceCents: level.oddsPriceCents,
                 });
               }
             })

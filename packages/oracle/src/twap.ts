@@ -1,4 +1,5 @@
 import type { TimestampMs, UsdCents, VenueQuote } from '@jet/shared';
+import { centsToMillicents, roundMillicentsToCentsHalfUp, type UsdMillicents } from './math.js';
 
 /**
  * Stair-step TWAP of mid = floor((bid+ask)/2) for a venue over [startTs, endTs].
@@ -12,6 +13,15 @@ export function midTwap(
   startTs: TimestampMs,
   endTs: TimestampMs,
 ): UsdCents | null {
+  const millicents = midTwapMillicents(quotes, startTs, endTs);
+  return millicents === null ? null : roundMillicentsToCentsHalfUp(millicents) as UsdCents;
+}
+
+export function midTwapMillicents(
+  quotes: readonly VenueQuote[],
+  startTs: TimestampMs,
+  endTs: TimestampMs,
+): UsdMillicents | null {
   // All quotes up to (and including) endTs, sorted ascending
   const relevant = quotes.filter(q => q.ts <= endTs).sort((a, b) => a.ts - b.ts);
   if (relevant.length === 0) return null;
@@ -27,7 +37,7 @@ export function midTwap(
   if (fillQuote) {
     segments.push({
       fromTs: startTs,
-      mid: Math.round((fillQuote.bidCents + fillQuote.askCents) / 2),
+        mid: centsToMillicents((fillQuote.bidCents + fillQuote.askCents) / 2),
     });
   }
 
@@ -36,7 +46,7 @@ export function midTwap(
     if (q.ts > startTs && q.ts < endTs) {
       segments.push({
         fromTs: q.ts,
-        mid: Math.round((q.bidCents + q.askCents) / 2),
+        mid: centsToMillicents((q.bidCents + q.askCents) / 2),
       });
     }
   }
@@ -57,7 +67,7 @@ export function midTwap(
   }
 
   if (totalMs === 0) return null;
-  return Math.floor(sumMidMs / totalMs) as UsdCents;
+  return sumMidMs / totalMs;
 }
 
 /**

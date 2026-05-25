@@ -2,7 +2,7 @@ import {
   bookChannel,
   marketChannel,
   oracleChannel,
-  priceCents,
+  oddsPriceCents,
 } from '@jet/shared';
 import type { MarketState, PriceCents, UsdCents } from '@jet/shared';
 import { ApiClient } from '../mm/api-client.js';
@@ -43,7 +43,7 @@ async function runMarket(
   const book = new BookTracker();
   const bucket = new TokenBucket(config.rateLimitTps);
 
-  let fair: PriceCents = priceCents(50);
+  let fair: PriceCents = oddsPriceCents(50);
   let msRemaining = market.msRemaining;
   let marketOpen = true;
   let resolveMarket: (() => void) | null = null;
@@ -59,7 +59,7 @@ async function runMarket(
 
   const ws = new WsClient(config.wsUrl, {
     onOracle: (event) => {
-      const btc = event.snapshot.priceCents as UsdCents;
+      const btc = event.snapshot.btcPriceCents as UsdCents;
       fair = fairYesProbCents(btc, strikeCents, msRemaining, msTotal, config.baseSigma);
     },
     onMarketStatus: (event) => {

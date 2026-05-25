@@ -74,8 +74,8 @@ describe('indicative oracle transparency', () => {
 
     expect(forming?.partitions).toHaveLength(ORACLE.partitionCount);
     expect(forming?.formingPriceCents).toBe(resolved.resolutionPriceCents);
-    expect(forming?.partitions.map(p => p.priceCents)).toEqual(
-      resolved.partitions.map(p => p.priceCents),
+    expect(forming?.partitions.map(p => p.btcPriceCents)).toEqual(
+      resolved.partitions.map(p => p.btcPriceCents),
     );
   });
 });

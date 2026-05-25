@@ -3,7 +3,7 @@ import {
   bookChannel,
   oracleChannel,
   userChannel,
-  priceCents,
+  oddsPriceCents,
 } from '@jet/shared';
 import type { PriceCents, UsdCents } from '@jet/shared';
 import { loadConfig } from './config.js';
@@ -37,7 +37,7 @@ async function main(): Promise<void> {
     `[mm] market ${marketId} open — strike ${strikeCents}c, duration ${msTotal}ms`,
   );
 
-  let currentFair: PriceCents = priceCents(50);
+  let currentFair: PriceCents = oddsPriceCents(50);
   let msRemaining = market.msRemaining;
   let stopped = false;
   let timer: ReturnType<typeof setInterval> | null = null;
@@ -49,7 +49,7 @@ async function main(): Promise<void> {
 
   const ws = new WsClient(config.wsUrl, {
     onOracle: (event) => {
-      const btc = event.snapshot.priceCents as UsdCents;
+      const btc = event.snapshot.btcPriceCents as UsdCents;
       currentFair = fairYesProbCents(btc, strikeCents, msRemaining, msTotal, config.baseSigma);
       doTick();
     },

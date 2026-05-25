@@ -15,12 +15,12 @@ import {
   usdCents,
 } from '@jet/shared';
 import type { VenueAdapter } from './venue-adapter.js';
-import type { PartitionVenueData, AggPartitionResult, ExclusionRecord } from './partition.js';
-import { midTwap } from './twap.js';
+import type { PartitionVenueData } from './partition.js';
+import { midTwapMillicents } from './twap.js';
 import { aggregatePartition } from './partition.js';
 import { classifyDispersion, deriveConfidence } from './dispersion.js';
 import { inputHashFromSamples } from './hash.js';
-import { computeMedian } from './math.js';
+import { computeMedian, roundMillicentsToCentsHalfUp, type UsdMillicents } from './math.js';
 
 export interface ResolveMarketParams {
   config: MarketConfig;
@@ -33,22 +33,24 @@ export interface ResolveMarketParams {
 }
 
 function aggregatePartitionPrices(
-  prices: readonly number[],
+  prices: readonly UsdMillicents[],
   method: 'median' | 'mean' | 'trimmed_mean',
 ): UsdCents {
   if (prices.length === 0) return usdCents(0);
   const sorted = [...prices].sort((a, b) => a - b);
+  let millicents: number;
   if (method === 'median') {
-    return usdCents(computeMedian(prices));
+    millicents = computeMedian(prices);
   } else if (method === 'mean') {
     const sum = sorted.reduce((a, b) => a + b, 0);
-    return usdCents(Math.floor(sum / sorted.length));
+    millicents = sum / sorted.length;
   } else {
     // trimmed_mean: drop lowest and highest, mean the rest
     const trimmed = sorted.length >= 3 ? sorted.slice(1, -1) : sorted;
     const sum = trimmed.reduce((a, b) => a + b, 0);
-    return usdCents(Math.floor(sum / trimmed.length));
+    millicents = sum / trimmed.length;
   }
+  return usdCents(roundMillicentsToCentsHalfUp(millicents));
 }
 
 /**
@@ -89,6 +91,7 @@ export function resolveMarket({
   const inputHash = inputHashFromSamples(windowSamples);
 
   const partitions: PartitionResult[] = [];
+  const partitionPriceMillicents: UsdMillicents[] = [];
   const partitionMadBps: number[] = [];
   const allExclusionsByVenue = new Map<VenueId, { reason: VenueExclusionReason; deviationBps?: Bps }>();
   const allSurvivorVenues = new Set<VenueId>();
@@ -100,7 +103,7 @@ export function resolveMarket({
     const venueData = new Map<VenueId, PartitionVenueData>();
     for (const adapter of adapters) {
       const allSamples = allSamplesMap.get(adapter.venueId) ?? [];
-      const twap = midTwap(allSamples, partitionStart, partitionEnd);
+      const twap = midTwapMillicents(allSamples, partitionStart, partitionEnd);
       const latestAtEnd = adapter.latestAt(partitionEnd);
       venueData.set(adapter.venueId, { twap, allSamples, latestAtEnd });
     }
@@ -111,10 +114,11 @@ export function resolveMarket({
       index: p + 1,
       startTs: partitionStart,
       endTs: partitionEnd,
-      priceCents: agg.priceCents,
+      btcPriceCents: agg.btcPriceCents,
       validVenues: agg.validVenues,
       excludedVenues: agg.excludedVenues,
     });
+    partitionPriceMillicents.push(agg.btcPriceMillicents);
 
     partitionMadBps.push(agg.madBps);
 
@@ -134,8 +138,7 @@ export function resolveMarket({
   }
 
   // Resolution price: aggregate partition prices
-  const partitionPrices = partitions.map(p => p.priceCents);
-  const resolutionPriceCents = aggregatePartitionPrices(partitionPrices, aggMethod);
+  const resolutionPriceCents = aggregatePartitionPrices(partitionPriceMillicents, aggMethod);
 
   // Window-level dispersion: median of per-partition MAD bps
   const dispersionBpsValue = computeMedian(partitionMadBps);
@@ -144,10 +147,21 @@ export function resolveMarket({
   let dispersionState = classifyDispersion(dispersionBpsValue, oracleCfg);
   if (hasUnderservedPartition) dispersionState = 'DISLOCATED';
 
+  const meanPartitionPrice = partitionPriceMillicents.reduce((sum, p) => sum + p, 0) / Math.max(1, partitionPriceMillicents.length);
+  const partitionVarianceBps = meanPartitionPrice > 0
+    ? Math.round(
+        computeMedian(partitionPriceMillicents.map(p => Math.abs(p - meanPartitionPrice))) /
+          meanPartitionPrice *
+          10_000,
+      )
+    : 0;
+
   const { confidenceBps, confidence } = deriveConfidence(
     dispersionBpsBranded,
     dispersionState,
     oracleCfg,
+    Math.min(...partitions.map(p => p.validVenues)),
+    bps(partitionVarianceBps),
     resolutionPriceCents,
     config.thresholdCents,
   );

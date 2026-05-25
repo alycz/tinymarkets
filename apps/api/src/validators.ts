@@ -1,5 +1,5 @@
 import type { PlaceOrderRequest, ApiError } from '@jet/shared';
-import { priceCents, shares } from '@jet/shared';
+import { oddsPriceCents, shares } from '@jet/shared';
 
 type Result<T> = { ok: true; value: T } | { ok: false; error: ApiError };
 
@@ -28,14 +28,14 @@ export function validatePlaceOrder(body: unknown): Result<PlaceOrderRequest> {
     return err('VALIDATION', 'tif must be GTC or IOC');
   }
 
-  const rawPrice = b['priceCents'];
+  const rawPrice = b['oddsPriceCents'];
   if (
     typeof rawPrice !== 'number' ||
     !Number.isInteger(rawPrice) ||
     rawPrice < 1 ||
     rawPrice > 99
   ) {
-    return err('INVALID_PRICE', 'priceCents must be an integer between 1 and 99');
+    return err('INVALID_PRICE', 'oddsPriceCents must be an integer between 1 and 99');
   }
 
   const rawSize = b['size'];
@@ -55,7 +55,7 @@ export function validatePlaceOrder(body: unknown): Result<PlaceOrderRequest> {
       side: b['side'] as 'YES' | 'NO',
       action: b['action'] as 'BUY' | 'SELL',
       type: 'LIMIT',
-      priceCents: priceCents(rawPrice),
+      oddsPriceCents: oddsPriceCents(rawPrice),
       size: shares(rawSize),
       tif: (b['tif'] as 'GTC' | 'IOC' | undefined) ?? 'GTC',
       clientOrderId: typeof b['clientOrderId'] === 'string' ? b['clientOrderId'] : undefined,

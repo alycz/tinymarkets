@@ -11,7 +11,7 @@ export interface ResolveResult {
  * Pure settlement: for each holder, move locked collateral to available (winners)
  * or zero it (losers). Returns per-user payouts and realized PnL.
  *
- * After resolution: Σ lockedCents == 0 == openInterest × PAYOUT_CENTS. ✓
+ * After resolution: Σ lockedSettlementCollateralCents == 0 == openInterest × PAYOUT_CENTS. ✓
  */
 export function settle(
   outcome: Side,
@@ -36,18 +36,26 @@ export function settle(
     const payout = isWinner ? usdCents(Math.abs(net) * (PAYOUT_CENTS as number)) : usdCents(0);
     payouts.set(userId, payout);
 
-    bal.availableCents = usdCents((bal.availableCents as number) + (payout as number));
-    bal.lockedCents = usdCents(0);
+    bal.availableBalanceCents = usdCents((bal.availableBalanceCents as number) + (payout as number));
+    bal.lockedSettlementCollateralCents = usdCents(0);
     pos.net = 0 as typeof pos.net;
 
-    const finalWealth = (bal.availableCents as number);
-    realizedPnlCents.set(userId, finalWealth - (startingBalanceCents as number));
+    const finalWealth = (bal.availableBalanceCents as number) + (bal.reservedForOrdersCents as number);
+    const pnl = finalWealth - (startingBalanceCents as number);
+    bal.realizedPnlCents = pnl;
+    realizedPnlCents.set(userId, pnl);
   }
 
   // Zero out remaining balances (users who never traded have pnl = 0)
   for (const [userId, bal] of balances) {
     if (!realizedPnlCents.has(userId)) {
-      realizedPnlCents.set(userId, (bal.availableCents as number) - (startingBalanceCents as number));
+      const pnl =
+        (bal.availableBalanceCents as number) +
+        (bal.reservedForOrdersCents as number) +
+        (bal.lockedSettlementCollateralCents as number) -
+        (startingBalanceCents as number);
+      bal.realizedPnlCents = pnl;
+      realizedPnlCents.set(userId, pnl);
     }
   }
 

@@ -1,4 +1,4 @@
-import { priceCents, MIN_PRICE_CENTS, MAX_PRICE_CENTS } from '@jet/shared';
+import { oddsPriceCents, MIN_PRICE_CENTS, MAX_PRICE_CENTS } from '@jet/shared';
 import type { PriceCents, UsdCents } from '@jet/shared';
 
 // Prevents sigma from collapsing to exactly zero at the final millisecond.
@@ -23,12 +23,12 @@ export function fairYesProbCents(
   const p = 1 / (1 + Math.exp(-rel / sigma));
   const yes = Math.round(100 * p);
   const clamped = Math.min(MAX_PRICE_CENTS, Math.max(MIN_PRICE_CENTS, yes));
-  return priceCents(clamped);
+  return oddsPriceCents(clamped);
 }
 
 export interface QuoteLevel {
   side: 'BID' | 'ASK';
-  priceCents: PriceCents;
+  oddsPriceCents: PriceCents;
   size: number;
 }
 
@@ -70,13 +70,13 @@ export function buildQuoteLadder(
     // Drop if this bid crossed into ask territory or is a duplicate
     if (bidClamped < rawMinAsk && !bidsSeen.has(bidClamped)) {
       bidsSeen.add(bidClamped);
-      result.push({ side: 'BID', priceCents: priceCents(bidClamped), size: sizePerLevel });
+      result.push({ side: 'BID', oddsPriceCents: oddsPriceCents(bidClamped), size: sizePerLevel });
     }
 
     // Drop if this ask crossed into bid territory or is a duplicate
     if (askClamped > rawMaxBid && !asksSeen.has(askClamped)) {
       asksSeen.add(askClamped);
-      result.push({ side: 'ASK', priceCents: priceCents(askClamped), size: sizePerLevel });
+      result.push({ side: 'ASK', oddsPriceCents: oddsPriceCents(askClamped), size: sizePerLevel });
     }
   }
 

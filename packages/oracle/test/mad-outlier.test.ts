@@ -23,7 +23,7 @@ function makeVenueData(mid: number, ts = START + 2500): PartitionVenueData {
     ts: timestampMs(ts),
   };
   return {
-    twap: usdCents(mid),
+    twap: mid * 10,
     allSamples: [q],
     latestAtEnd: { ...q, ts: timestampMs(START + 4500) },
   };

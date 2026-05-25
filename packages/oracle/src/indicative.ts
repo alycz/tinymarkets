@@ -11,7 +11,12 @@ import {
 } from '@jet/shared';
 import type { VenueAdapter } from './venue-adapter.js';
 import { classifyDispersion, deriveConfidence } from './dispersion.js';
-import { computeMad, computeMedian } from './math.js';
+import {
+  centsToMillicents,
+  computeMad,
+  computeMedian,
+  roundMillicentsToCentsHalfUp,
+} from './math.js';
 import { buildFormingResolution } from './forming-resolution.js';
 
 export interface BuildIndicativeParams {
@@ -33,7 +38,7 @@ export function buildIndicative({
   oracleCfg,
 }: BuildIndicativeParams): IndicativeSnapshot {
   const venues: VenueHealth[] = [];
-  const candidateMids: { venue: VenueId; mid: number; index: number }[] = [];
+  const candidateMids: { venue: VenueId; midMillicents: number; index: number }[] = [];
 
   for (const adapter of adapters) {
     const latest = adapter.latestAt(now);
@@ -78,7 +83,8 @@ export function buildIndicative({
       continue;
     }
 
-    const mid = Math.round((latest.bidCents + latest.askCents) / 2);
+    const midMillicents = centsToMillicents((latest.bidCents + latest.askCents) / 2);
+    const mid = roundMillicentsToCentsHalfUp(midMillicents);
     const spread = latest.askCents - latest.bidCents;
     const spreadBpsValue = mid > 0 ? Math.round((spread / mid) * 10_000) : 0;
 
@@ -103,10 +109,10 @@ export function buildIndicative({
       lastUpdateMs: latest.ts,
       healthy: true,
     });
-    candidateMids.push({ venue: adapter.venueId, mid, index: venues.length - 1 });
+    candidateMids.push({ venue: adapter.venueId, midMillicents, index: venues.length - 1 });
   }
 
-  const candidateValues = candidateMids.map(v => v.mid);
+  const candidateValues = candidateMids.map(v => v.midMillicents);
   const crossVenueMedian = candidateValues.length > 0 ? computeMedian(candidateValues) : 0;
   const madBpsValue = candidateValues.length > 1
     ? Math.round((computeMad(candidateValues, crossVenueMedian) / (crossVenueMedian || 1)) * 10_000)
@@ -116,7 +122,7 @@ export function buildIndicative({
 
   for (const candidate of candidateMids) {
     const deviationBps = crossVenueMedian > 0
-      ? Math.round((Math.abs(candidate.mid - crossVenueMedian) / crossVenueMedian) * 10_000)
+      ? Math.round((Math.abs(candidate.midMillicents - crossVenueMedian) / crossVenueMedian) * 10_000)
       : 0;
     if (deviationBps > outlierThreshold) {
       const venue = venues[candidate.index]!;
@@ -126,16 +132,18 @@ export function buildIndicative({
         excludedReason: 'OUTLIER',
       };
     } else {
-      survivorMids.push(candidate.mid);
+      survivorMids.push(candidate.midMillicents);
     }
   }
 
-  const priceCents = usdCents(
-    survivorMids.length > 0
-      ? computeMedian(survivorMids)
-      : crossVenueMedian > 0
-        ? crossVenueMedian
-        : 10_000_000,
+  const btcPriceCents = usdCents(
+    roundMillicentsToCentsHalfUp(
+      survivorMids.length > 0
+        ? computeMedian(survivorMids)
+        : crossVenueMedian > 0
+          ? crossVenueMedian
+          : centsToMillicents(10_000_000),
+    ),
   );
   const dispersionBpsBranded = bps(madBpsValue);
   const dispersionState = classifyDispersion(madBpsValue, oracleCfg);
@@ -143,6 +151,8 @@ export function buildIndicative({
     dispersionBpsBranded,
     dispersionState,
     oracleCfg,
+    survivorMids.length,
+    bps(0),
   );
 
   const formingResolution =
@@ -152,7 +162,7 @@ export function buildIndicative({
 
   return {
     marketId,
-    priceCents,
+    btcPriceCents,
     confidenceBps,
     confidence,
     dispersionBps: dispersionBpsBranded,

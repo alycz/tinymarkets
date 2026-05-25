@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { MarketCore } from '../src/market';
 import type { MarketConfig, Match } from '@jet/shared';
-import { priceCents, shares, timestampMs, usdCents, PAYOUT_CENTS } from '@jet/shared';
+import { oddsPriceCents, shares, timestampMs, usdCents, PAYOUT_CENTS } from '@jet/shared';
 
 const cfg: MarketConfig = {
   marketId: 'mkt-inv',
@@ -28,7 +28,7 @@ function m(
     makerUserId,
     makerOrderId: `om${seq}` as Match['makerOrderId'],
     takerSide: 'YES',
-    yesPriceCents: priceCents(price),
+    yesPriceCents: oddsPriceCents(price),
     size: shares(size),
     ts: timestampMs(seq * 1000),
   };
@@ -42,8 +42,8 @@ function assertInvariant(core: MarketCore, users: string[]) {
   let actualTotal = 0;
   for (const u of users) {
     const bal = core.getBalance(u);
-    actualLocked += bal.lockedCents as number;
-    actualTotal += (bal.availableCents as number) + (bal.lockedCents as number);
+    actualLocked += bal.lockedSettlementCollateralCents as number;
+    actualTotal += (bal.availableBalanceCents as number) + (bal.lockedSettlementCollateralCents as number);
   }
   expect(actualLocked).toBe(expectedLocked);
   return actualTotal;

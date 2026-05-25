@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MarketCore } from '../src/market';
 import type { MarketConfig, Match } from '@jet/shared';
-import { priceCents, shares, timestampMs, usdCents } from '@jet/shared';
+import { oddsPriceCents, shares, timestampMs, usdCents } from '@jet/shared';
 
 const cfg: MarketConfig = {
   marketId: 'mkt-1',
@@ -27,7 +27,7 @@ function makeMatch(
     makerUserId,
     makerOrderId: `o-m${seq}` as Match['makerOrderId'],
     takerSide: 'YES',
-    yesPriceCents: priceCents(price),
+    yesPriceCents: oddsPriceCents(price),
     size: shares(size),
     ts: timestampMs(1_000),
   };
@@ -80,9 +80,9 @@ describe('four-kind classification and accounting', () => {
       // Dave paid 2*60=120, alice received 2*60=120
       const daveBal = core.getBalance('dave');
       const aliceBal = core.getBalance('alice');
-      expect(daveBal.availableCents).toBe(START - 2 * 60);
+      expect(daveBal.availableBalanceCents).toBe(START - 2 * 60);
       // Alice started at START, paid 50*3=150 on OPEN, then received 60*2=120 on TRANSFER
-      expect(aliceBal.availableCents).toBe(START - 50 * 3 + 60 * 2);
+      expect(aliceBal.availableBalanceCents).toBe(START - 50 * 3 + 60 * 2);
     });
   });
 
@@ -115,7 +115,7 @@ describe('four-kind classification and accounting', () => {
       // Buyer (bob, long NO) receives (100-45)*2 = 110 back
       const bobBal = core.getBalance('bob');
       // bob started at START, paid (100-40)*4 = 240 on OPEN, received (100-45)*2=110 on TRANSFER_NO
-      expect(bobBal.availableCents).toBe(START - 60 * 4 + 55 * 2);
+      expect(bobBal.availableBalanceCents).toBe(START - 60 * 4 + 55 * 2);
     });
   });
 
@@ -145,9 +145,9 @@ describe('four-kind classification and accounting', () => {
       const bobBal = core.getBalance('bob');
       const aliceBal = core.getBalance('alice');
       // bob: START - 50*3 (OPEN cost) + 45*3 (CLOSE receipt) = START - 150 + 135 = START - 15
-      expect(bobBal.availableCents).toBe(START - 50 * 3 + 45 * 3);
+      expect(bobBal.availableBalanceCents).toBe(START - 50 * 3 + 45 * 3);
       // alice: START - 50*3 (OPEN cost) + 55*3 (CLOSE receipt) = START - 150 + 165 = START + 15
-      expect(aliceBal.availableCents).toBe(START - 50 * 3 + 55 * 3);
+      expect(aliceBal.availableBalanceCents).toBe(START - 50 * 3 + 55 * 3);
     });
   });
 });

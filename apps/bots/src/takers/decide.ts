@@ -1,7 +1,7 @@
 import {
   MAX_PRICE_CENTS,
   MIN_PRICE_CENTS,
-  priceCents,
+  oddsPriceCents,
   shares,
 } from '@jet/shared';
 import type { Action, PriceCents, Shares, Side } from '@jet/shared';
@@ -19,7 +19,7 @@ export interface DecisionInput {
 export interface TakerDecision {
   side: Side;
   action: Action;
-  priceCents: PriceCents;
+  oddsPriceCents: PriceCents;
   size: Shares;
 }
 
@@ -42,7 +42,7 @@ export function decide(input: DecisionInput): TakerDecision | null {
   return {
     side,
     action: 'BUY',
-    priceCents: price,
+    oddsPriceCents: price,
     size: shares(input.persona.sizeScale),
   };
 }
@@ -107,7 +107,7 @@ function jitter(rng: () => number): number {
 }
 
 function clampPrice(raw: number): PriceCents {
-  return priceCents(Math.min(MAX_PRICE_CENTS, Math.max(MIN_PRICE_CENTS, Math.round(raw))));
+  return oddsPriceCents(Math.min(MAX_PRICE_CENTS, Math.max(MIN_PRICE_CENTS, Math.round(raw))));
 }
 
 function clamp(n: number, min: number, max: number): number {

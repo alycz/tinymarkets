@@ -96,7 +96,7 @@ export default function MarketPage({
     <ChartPanel
       priceHistory={priceHistory}
       thresholdCents={config.thresholdCents}
-      currentPriceCents={oracleSnapshot?.priceCents ?? null}
+      currentPriceCents={oracleSnapshot?.btcPriceCents ?? null}
     />
   );
 
