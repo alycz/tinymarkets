@@ -3,8 +3,8 @@ import { MarketSession } from './session.js';
 import { Broadcaster } from './broadcasts.js';
 import { WsManager } from './ws/manager.js';
 
-const API_HOST = process.env['API_HOST'] ?? '0.0.0.0';
-const API_PORT = parseInt(process.env['API_PORT'] ?? '3001', 10);
+const HOST = process.env['HOST'] ?? '0.0.0.0';
+const PORT = requirePort();
 
 const session = new MarketSession();
 const manager = new WsManager();
@@ -14,7 +14,7 @@ session.setBroadcaster(broadcaster);
 manager.setSession(session);
 
 const server = await buildServer(session, manager);
-const address = await server.listen({ host: API_HOST, port: API_PORT });
+const address = await server.listen({ host: HOST, port: PORT });
 console.log(`API listening at ${address}`);
 
 async function shutdown() {
@@ -25,3 +25,15 @@ async function shutdown() {
 
 process.on('SIGTERM', () => void shutdown());
 process.on('SIGINT', () => void shutdown());
+
+function requirePort(): number {
+  const raw = process.env['PORT'];
+  if (!raw) {
+    throw new Error('PORT is required');
+  }
+  const port = parseInt(raw, 10);
+  if (!Number.isInteger(port) || port <= 0 || port > 65_535) {
+    throw new Error(`PORT must be an integer from 1 to 65535, got ${raw}`);
+  }
+  return port;
+}

@@ -33,17 +33,22 @@ pnpm install
 
 ## Run Locally
 
-Start the API and web app:
+Install dependencies, then set local env vars before starting the API and web app.
+The API and WebSocket URLs must come from env; the app does not fall back to a
+built-in local address.
 
 ```bash
+pnpm install
+export API_ORIGIN="http://<api-host>:3001"
+export FRONTEND_ORIGIN="http://<web-host>:5173"
+export WS_ORIGIN="ws://<api-host>:3001"
+export PORT=3001
+export HOST=0.0.0.0
+export CORS_ORIGIN="$FRONTEND_ORIGIN"
+export VITE_API_URL="$API_ORIGIN"
+export VITE_WS_URL="$WS_ORIGIN/ws"
 pnpm dev
 ```
-
-Defaults:
-
-- API: `http://localhost:3001`
-- Web: Vite's printed localhost URL, usually `http://localhost:5173`
-- WebSocket: `ws://localhost:3001/ws`
 
 Open the web app and click `Start Demo Market`.
 
@@ -68,8 +73,8 @@ The market maker waits for an open market, then quotes both sides of the YES boo
 Useful bot environment variables:
 
 ```bash
-API_BASE_URL=http://localhost:3001
-WS_URL=ws://localhost:3001/ws
+API_BASE_URL=<api-http-origin>
+WS_URL=<api-ws-origin>/ws
 BOT_USER_ID=mm-bot
 NUM_TAKERS=30
 RATE_LIMIT_TPS=4
@@ -87,22 +92,18 @@ That switches the deterministic simulated venue set to a near-expiry single-venu
 
 ## API And Web Env
 
-API:
+Use the relevant `.env.example` file as the checklist for values to provide in
+your shell, hosting dashboard, or Vite env file:
 
-```bash
-API_HOST=0.0.0.0
-API_PORT=3001
-WEB_ORIGIN=http://localhost:5173
-```
+- `apps/api/.env.example`: `PORT`, optional `HOST`, `CORS_ORIGIN`
+- `apps/web/.env.example`: `VITE_API_URL`, `VITE_WS_URL`, optional `VITE_DEMO_USER_ID`
+- `apps/bots/.env.example`: `API_BASE_URL`, `WS_URL`, bot tuning vars
 
-Web:
+`VITE_API_URL` must be the API HTTP(S) origin with no trailing slash.
+`VITE_WS_URL` must be the full WS(S) endpoint ending in `/ws`.
 
-```bash
-VITE_API_URL=http://localhost:3001
-VITE_DEMO_USER_ID=demo
-```
-
-If `VITE_API_URL` is omitted, the web app uses `http://localhost:3001` and derives the WebSocket URL from it.
+See `DEPLOY.md` for Vercel/Netlify frontend deployment, WS-capable backend
+deployment, and hosted bot startup notes.
 
 ## Checks
 
