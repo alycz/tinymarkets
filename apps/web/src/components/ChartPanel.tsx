@@ -59,7 +59,7 @@ export default function ChartPanel({ priceHistory, thresholdCents, currentPriceC
     if (!series || priceHistory.length === 0) return;
     const seen = new Map<number, number>();
     for (const p of priceHistory) {
-      seen.set(Math.floor(p.ts / 1000), p.priceCents / 100);
+      seen.set(Math.floor(p.ts / 1000), p.btcPriceCents / 100);
     }
     const data = Array.from(seen.entries())
       .sort((a, b) => a[0] - b[0])

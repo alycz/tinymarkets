@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { priceCents } from '@jet/shared';
+import { oddsPriceCents } from '@jet/shared';
 import { decide } from '../takers/decide.js';
 import type { TakerPersona } from '../takers/persona.js';
 
@@ -31,10 +31,10 @@ describe('taker decide', () => {
 
     for (let i = 0; i < 10_000; i++) {
       const decision = decide({
-        fair: priceCents(85),
+        fair: oddsPriceCents(85),
         persona: persona(),
-        bestBid: priceCents(84),
-        bestAsk: priceCents(86),
+        bestBid: oddsPriceCents(84),
+        bestAsk: oddsPriceCents(86),
         msRemaining: 60_000,
         rng,
       });
@@ -48,10 +48,10 @@ describe('taker decide', () => {
 
   it('rejects BUY NO near expiry when YES fair is decisive', () => {
     const decision = decide({
-      fair: priceCents(98),
+      fair: oddsPriceCents(98),
       persona: persona(),
-      bestBid: priceCents(20),
-      bestAsk: priceCents(98),
+      bestBid: oddsPriceCents(20),
+      bestAsk: oddsPriceCents(98),
       msRemaining: 5_000,
       rng: () => 0.99,
     });
@@ -61,9 +61,9 @@ describe('taker decide', () => {
 
   it('skips forced BUY YES when there is no ask to take', () => {
     const decision = decide({
-      fair: priceCents(85),
+      fair: oddsPriceCents(85),
       persona: persona(),
-      bestBid: priceCents(84),
+      bestBid: oddsPriceCents(84),
       bestAsk: null,
       msRemaining: 60_000,
       rng: () => 0,
@@ -74,10 +74,10 @@ describe('taker decide', () => {
 
   it('suppresses fade personas when near-expiry fair has a clear winner', () => {
     const decision = decide({
-      fair: priceCents(98),
+      fair: oddsPriceCents(98),
       persona: persona({ fade: 0.15 }),
-      bestBid: priceCents(20),
-      bestAsk: priceCents(98),
+      bestBid: oddsPriceCents(20),
+      bestAsk: oddsPriceCents(98),
       msRemaining: 5_000,
       rng: () => 0.97,
     });

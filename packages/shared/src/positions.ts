@@ -4,9 +4,13 @@ import type { MarketId, PriceCents, SignedShares, UsdCents, UserId } from './uni
 export interface Balance {
   userId: UserId;
   /** free cash available to trade, USD cents */
-  availableCents: UsdCents;
-  /** cash locked as collateral behind open orders + open positions, USD cents */
-  lockedCents: UsdCents;
+  availableBalanceCents: UsdCents;
+  /** cash reserved behind resting orders; not settlement collateral */
+  reservedForOrdersCents: UsdCents;
+  /** cash backing open positions; must equal openInterestShares * 100 globally */
+  lockedSettlementCollateralCents: UsdCents;
+  /** signed realized PnL for this market */
+  realizedPnlCents: number;
 }
 
 export interface Position {

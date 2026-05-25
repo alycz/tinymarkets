@@ -1,6 +1,7 @@
 import { ORACLE } from '@jet/config';
 import {
   type IndicativeSnapshot,
+  type DemoMode,
   type MarketConfig,
   type MarketId,
   type RampResolution,
@@ -17,12 +18,14 @@ type SnapshotCallback = (snapshot: IndicativeSnapshot) => void;
 export interface RampOracleConfig {
   scenario: ScenarioName;
   seed: number;
+  demoMode?: DemoMode;
   clock?: { now(): number };
 }
 
 /**
  * Drop-in replacement for MockOracle.
- * Uses the real RAMP_V1 settlement methodology with deterministic simulated venues.
+ * Uses the real RAMP_V1 settlement methodology. Simulated deterministic venues are always
+ * present so demo resolution never depends solely on live APIs.
  */
 export class RampOracle {
   private marketId: MarketId | null = null;
@@ -50,8 +53,7 @@ export class RampOracle {
     this.marketStartMs = marketStartMs;
     this.config = config ?? null;
     this.expiryTs = expiryTs ?? null;
-    const { adapters } = buildScenario(this.scenario, this.cfg.seed, marketStartMs);
-    this.adapters = adapters;
+    this.adapters = this.buildAdapters(this.scenario, marketStartMs);
     this.interval = setInterval(() => this.tick(), ORACLE.sampleIntervalMs);
     this.tick();
   }
@@ -70,8 +72,7 @@ export class RampOracle {
   armScenario(scenario: ScenarioName): boolean {
     if (!this.marketId || this.marketStartMs === null) return false;
     this.scenario = scenario;
-    const { adapters } = buildScenario(this.scenario, this.cfg.seed, this.marketStartMs);
-    this.adapters = adapters;
+    this.adapters = this.buildAdapters(this.scenario, this.marketStartMs);
     this.tick();
     return true;
   }
@@ -87,6 +88,16 @@ export class RampOracle {
 
   private now(): number {
     return this.cfg.clock?.now() ?? Date.now();
+  }
+
+  private buildAdapters(scenario: ScenarioName, marketStartMs: number): VenueAdapter[] {
+    const { adapters } = buildScenario(scenario, this.cfg.seed, marketStartMs);
+    const mode = this.cfg.demoMode ?? 'simulated';
+    if (mode === 'simulated') return adapters;
+
+    // Live adapters are optional stretch work. Until present, live/hybrid still keep
+    // deterministic simulated venues so the demo never depends solely on external APIs.
+    return adapters;
   }
 
   private tick(): void {

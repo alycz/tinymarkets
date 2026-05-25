@@ -3,7 +3,7 @@ import type { IndicativeSnapshot, TimestampMs, UsdCents } from '@jet/shared';
 
 export interface PricePoint {
   ts: TimestampMs;
-  priceCents: UsdCents;
+  btcPriceCents: UsdCents;
 }
 
 export function usePriceHistory(oracleSnapshot: IndicativeSnapshot | null): PricePoint[] {
@@ -12,7 +12,7 @@ export function usePriceHistory(oracleSnapshot: IndicativeSnapshot | null): Pric
   useEffect(() => {
     if (!oracleSnapshot) return;
     setHistory((prev) => {
-      const next = [...prev, { ts: oracleSnapshot.ts, priceCents: oracleSnapshot.priceCents }];
+      const next = [...prev, { ts: oracleSnapshot.ts, btcPriceCents: oracleSnapshot.btcPriceCents }];
       return next.slice(-600);
     });
   }, [oracleSnapshot]);

@@ -161,7 +161,7 @@ function PreResolution({
       <div style={metricGridStyle}>
         <Metric
           label="LIVE INDICATIVE"
-          value={formatUsdCents(snapshot.priceCents)}
+          value={formatUsdCents(snapshot.btcPriceCents)}
           note="not settlement"
         />
         <div>
@@ -375,7 +375,7 @@ function PartitionRows({
 }: {
   partitions: Array<{
     index: number;
-    priceCents: UsdCents;
+    btcPriceCents: UsdCents;
     validVenues: number;
     excludedVenues: number;
     complete?: boolean;
@@ -386,7 +386,7 @@ function PartitionRows({
       {partitions.map((p) => (
         <div key={p.index} style={partitionRowStyle}>
           <span style={{ color: C.textDim }}>P{p.index}</span>
-          <span style={{ color: C.text, fontWeight: 700 }}>{formatUsdCents(p.priceCents)}</span>
+          <span style={{ color: C.text, fontWeight: 700 }}>{formatUsdCents(p.btcPriceCents)}</span>
           <span style={{ color: C.textDim }}>{p.validVenues} used</span>
           <span style={{ color: p.excludedVenues > 0 ? C.warn : C.textDim }}>{p.excludedVenues} excluded</span>
           {'complete' in p && <Pill text={p.complete ? 'FINAL' : 'FORMING'} color={p.complete ? C.ok : C.warn} small />}

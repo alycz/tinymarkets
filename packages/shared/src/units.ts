@@ -55,9 +55,9 @@ export function usdCents(n: number): UsdCents {
   return n as UsdCents;
 }
 
-export function priceCents(n: number): PriceCents {
+export function oddsPriceCents(n: number): PriceCents {
   if (!Number.isInteger(n) || n < 1 || n > 99) {
-    throw new RangeError(`priceCents must be an integer 1..99, got ${n}`);
+    throw new RangeError(`oddsPriceCents must be an integer 1..99, got ${n}`);
   }
   return n as PriceCents;
 }
@@ -85,6 +85,6 @@ export function noPriceCents(yes: PriceCents): PriceCents {
   return (100 - yes) as PriceCents;
 }
 
-export function isValidPriceCents(n: number): boolean {
+export function isValidOddsPriceCents(n: number): boolean {
   return Number.isInteger(n) && n >= 1 && n <= 99;
 }

@@ -14,7 +14,7 @@ import type {
   UserId,
   UserResolutionEvent,
 } from '@jet/shared';
-import { priceCents, shares } from '@jet/shared';
+import { oddsPriceCents, shares } from '@jet/shared';
 import { MarketSession } from '../session.js';
 import type { Broadcaster } from '../broadcasts.js';
 
@@ -95,7 +95,7 @@ describe('MarketSession integration', () => {
       side: 'YES' as const,
       action: 'BUY' as const,
       type: 'LIMIT' as const,
-      priceCents: priceCents(60),
+      oddsPriceCents: oddsPriceCents(60),
       size: shares(10),
       tif: 'GTC' as const,
     };
@@ -114,7 +114,7 @@ describe('MarketSession integration', () => {
       side: 'YES' as const,
       action: 'SELL' as const,
       type: 'LIMIT' as const,
-      priceCents: priceCents(60),
+      oddsPriceCents: oddsPriceCents(60),
       size: shares(10),
       tif: 'IOC' as const,
     };
@@ -153,7 +153,7 @@ describe('MarketSession integration', () => {
       side: 'YES' as const,
       action: 'BUY' as const,
       type: 'LIMIT' as const,
-      priceCents: priceCents(55),
+      oddsPriceCents: oddsPriceCents(55),
       size: shares(5),
       tif: 'GTC' as const,
     }) as { ok: true; order: CanonicalOrder; fills: Fill[] };
@@ -164,6 +164,69 @@ describe('MarketSession integration', () => {
 
     const good = session.cancelOrder(order.orderId, 'userA' as UserId);
     expect(good.ok).toBe(true);
+  });
+
+  it('reserves resting orders separately from settlement collateral and releases on cancel/fill', () => {
+    session.startDemo();
+    const marketId = session.getMarketId()!;
+
+    const resting = session.placeOrder({
+      userId: 'userA' as UserId,
+      marketId,
+      side: 'YES' as const,
+      action: 'BUY' as const,
+      type: 'LIMIT' as const,
+      oddsPriceCents: oddsPriceCents(60),
+      size: shares(10),
+      tif: 'GTC' as const,
+    }) as { ok: true; order: CanonicalOrder; fills: Fill[] };
+
+    let balA = session.getUserSnapshot('userA' as UserId)!.balance;
+    expect(balA.availableBalanceCents).toBe(100_000 - 600);
+    expect(balA.reservedForOrdersCents).toBe(600);
+    expect(balA.lockedSettlementCollateralCents).toBe(0);
+
+    session.placeOrder({
+      userId: 'userB' as UserId,
+      marketId,
+      side: 'YES' as const,
+      action: 'SELL' as const,
+      type: 'LIMIT' as const,
+      oddsPriceCents: oddsPriceCents(60),
+      size: shares(4),
+      tif: 'IOC' as const,
+    });
+
+    balA = session.getUserSnapshot('userA' as UserId)!.balance;
+    expect(balA.reservedForOrdersCents).toBe(60 * 6);
+    expect(balA.lockedSettlementCollateralCents).toBe(50 * 4);
+
+    const cancelled = session.cancelOrder(resting.order.orderId, 'userA' as UserId);
+    expect(cancelled.ok).toBe(true);
+    balA = session.getUserSnapshot('userA' as UserId)!.balance;
+    expect(balA.reservedForOrdersCents).toBe(0);
+    expect(balA.lockedSettlementCollateralCents).toBe(50 * 4);
+  });
+
+  it('rejects orders that cannot reserve full worst-case cost before mutating the book', () => {
+    session.startDemo();
+    const marketId = session.getMarketId()!;
+
+    const result = session.placeOrder({
+      userId: 'underfunded' as UserId,
+      marketId,
+      side: 'YES' as const,
+      action: 'BUY' as const,
+      type: 'LIMIT' as const,
+      oddsPriceCents: oddsPriceCents(99),
+      size: shares(2_000),
+      tif: 'GTC' as const,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.error.code).toBe('INSUFFICIENT_BALANCE');
+    expect(session.getOrderBookSnapshot()!.bids).toHaveLength(0);
+    expect(session.getUserSnapshot('underfunded' as UserId)!.balance.reservedForOrdersCents).toBe(0);
   });
 
   it('resolution path: emits resolving -> resolved -> market:resolved + user events', async () => {
@@ -183,7 +246,7 @@ describe('MarketSession integration', () => {
       side: 'YES' as const,
       action: 'BUY' as const,
       type: 'LIMIT' as const,
-      priceCents: priceCents(60),
+      oddsPriceCents: oddsPriceCents(60),
       size: shares(5),
       tif: 'GTC' as const,
     });
@@ -193,7 +256,7 @@ describe('MarketSession integration', () => {
       side: 'YES' as const,
       action: 'SELL' as const,
       type: 'LIMIT' as const,
-      priceCents: priceCents(60),
+      oddsPriceCents: oddsPriceCents(60),
       size: shares(5),
       tif: 'IOC' as const,
     });

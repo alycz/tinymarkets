@@ -10,9 +10,9 @@ import {
 } from '@jet/shared';
 import type { VenueAdapter } from './venue-adapter.js';
 import type { PartitionVenueData } from './partition.js';
-import { midTwap } from './twap.js';
+import { midTwapMillicents } from './twap.js';
 import { aggregatePartition } from './partition.js';
-import { computeMedian } from './math.js';
+import { computeMedian, roundMillicentsToCentsHalfUp, type UsdMillicents } from './math.js';
 
 export interface BuildFormingResolutionParams {
   config: MarketConfig;
@@ -50,6 +50,7 @@ export function buildFormingResolution({
   }
 
   const partitions = [];
+  const partitionPriceMillicents: UsdMillicents[] = [];
   for (let p = 0; p < oracleCfg.partitionCount; p++) {
     const partitionStart = timestampMs(windowStart + p * partitionMs);
     if (partitionStart >= boundedNow) break;
@@ -60,17 +61,18 @@ export function buildFormingResolution({
     const venueData = new Map<VenueId, PartitionVenueData>();
     for (const adapter of adapters) {
       const allSamples = allSamplesMap.get(adapter.venueId) ?? [];
-      const twap = midTwap(allSamples, partitionStart, partitionEnd);
+      const twap = midTwapMillicents(allSamples, partitionStart, partitionEnd);
       const latestAtEnd = adapter.latestAt(partitionEnd);
       venueData.set(adapter.venueId, { twap, allSamples, latestAtEnd });
     }
 
     const agg = aggregatePartition(venueData, partitionStart, partitionEnd, oracleCfg);
+    partitionPriceMillicents.push(agg.btcPriceMillicents);
     partitions.push({
       index: p + 1,
       startTs: partitionStart,
       endTs: partitionEnd,
-      priceCents: agg.priceCents,
+      btcPriceCents: agg.btcPriceCents,
       validVenues: agg.validVenues,
       excludedVenues: agg.excludedVenues,
       complete: fullPartitionEnd <= boundedNow,
@@ -87,7 +89,7 @@ export function buildFormingResolution({
       partitionSeconds: oracleCfg.partitionSeconds,
       partitionCount: oracleCfg.partitionCount,
     },
-    formingPriceCents: usdCents(computeMedian(partitions.map(p => p.priceCents))),
+    formingPriceCents: usdCents(roundMillicentsToCentsHalfUp(computeMedian(partitionPriceMillicents))),
     partitions,
   };
 }

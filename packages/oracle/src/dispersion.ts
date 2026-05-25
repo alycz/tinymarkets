@@ -20,9 +20,9 @@ export function classifyDispersion(madBps: number, oracleCfg: OracleCfg): Disper
 /**
  * Derive the output-only confidence band.
  *
- * `confidenceBps` = max(dispersionBps, outlierBpsFloor), minimum 1.
- * `confidence` = LOW if stressed/dislocated or resolution price near threshold;
- *                MEDIUM if elevated; HIGH otherwise.
+ * `confidenceBps` is derived from residual survivor dispersion and partition variance.
+ * `confidence` is LOW on too few survivors, stressed/dislocated dispersion, or near-threshold
+ * resolution; MEDIUM on minimum survivor count or elevated variance; HIGH otherwise.
  *
  * `thresholdCents` is optional: omit for indicative snapshots where there's no strike.
  */
@@ -30,21 +30,38 @@ export function deriveConfidence(
   dispersionBps: Bps,
   dispersionState: DispersionState,
   oracleCfg: OracleCfg,
+  survivorCount: number,
+  partitionVarianceBps: Bps,
   resolutionPriceCents?: UsdCents,
   thresholdCents?: UsdCents,
 ): { confidenceBps: Bps; confidence: ConfidenceLevel } {
-  const confBpsValue = Math.max(1, Math.round(Math.max(dispersionBps, oracleCfg.outlierBpsFloor)));
+  const confBpsValue = Math.max(
+    1,
+    Math.round(Math.max(dispersionBps, partitionVarianceBps, oracleCfg.outlierBpsFloor)),
+  );
   const confidenceBpsVal = bps(confBpsValue);
 
+  const thresholdBandCents = thresholdCents !== undefined
+    ? Math.round((thresholdCents * confBpsValue) / 10_000)
+    : 0;
   const nearThreshold =
     resolutionPriceCents !== undefined &&
     thresholdCents !== undefined &&
-    Math.abs(resolutionPriceCents - thresholdCents) <= confBpsValue;
+    Math.abs(resolutionPriceCents - thresholdCents) <= thresholdBandCents;
 
   let confidence: ConfidenceLevel;
-  if (dispersionState === 'STRESSED' || dispersionState === 'DISLOCATED' || nearThreshold) {
+  if (
+    survivorCount < oracleCfg.minVenues ||
+    dispersionState === 'STRESSED' ||
+    dispersionState === 'DISLOCATED' ||
+    nearThreshold
+  ) {
     confidence = 'LOW';
-  } else if (dispersionState === 'ELEVATED') {
+  } else if (
+    survivorCount === oracleCfg.minVenues ||
+    dispersionState === 'ELEVATED' ||
+    partitionVarianceBps >= oracleCfg.dispersion.elevatedBps
+  ) {
     confidence = 'MEDIUM';
   } else {
     confidence = 'HIGH';

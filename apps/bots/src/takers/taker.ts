@@ -67,7 +67,7 @@ export class TakerBot {
         side: decision.side,
         action: decision.action,
         type: 'LIMIT',
-        priceCents: decision.priceCents,
+        oddsPriceCents: decision.oddsPriceCents,
         size: decision.size,
         tif: 'IOC',
         clientOrderId: `${this.persona.userId}-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`,

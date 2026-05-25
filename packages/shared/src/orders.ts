@@ -26,7 +26,7 @@ export interface PlaceOrderRequest {
   action: Action;
   type: OrderType;
   /** limit price in the chosen side's cents (a YES price if side=YES, a NO price if side=NO) */
-  priceCents: PriceCents;
+  oddsPriceCents: PriceCents;
   size: Shares;
   tif?: TimeInForce;
   clientOrderId?: string;
@@ -54,5 +54,5 @@ export interface CanonicalOrder {
   status: OrderStatus;
   createdAtMs: TimestampMs;
   /** echo of how the user expressed the order, for faithful UI display */
-  display: { side: Side; action: Action; priceCents: PriceCents };
+  display: { side: Side; action: Action; oddsPriceCents: PriceCents };
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { MarketStatus, Side, Action, UsdCents } from '@jet/shared';
-import { MIN_PRICE_CENTS, MAX_PRICE_CENTS, priceCents, shares } from '@jet/shared';
+import { MIN_PRICE_CENTS, MAX_PRICE_CENTS, oddsPriceCents, shares } from '@jet/shared';
 import { C, S } from '../theme.js';
 import { formatUsdCents } from '../format.js';
 import Panel from './Panel.js';
@@ -48,7 +48,7 @@ export default function TradeTicket({ marketId, userId, marketStatus, apiUrl }: 
           side,
           action,
           type: 'LIMIT',
-          priceCents: priceCents(priceNum),
+          oddsPriceCents: oddsPriceCents(priceNum),
           size: shares(sizeNum),
           tif: 'GTC',
         }),

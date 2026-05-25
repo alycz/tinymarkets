@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { MarketCore } from '../src/market';
 import type { MarketConfig, Match } from '@jet/shared';
-import { priceCents, shares, timestampMs, usdCents, PAYOUT_CENTS } from '@jet/shared';
+import { oddsPriceCents, shares, timestampMs, usdCents, PAYOUT_CENTS } from '@jet/shared';
 
 const cfg: MarketConfig = {
   marketId: 'mkt-res',
@@ -28,7 +28,7 @@ function m(
     makerUserId,
     makerOrderId: `om${seq}` as Match['makerOrderId'],
     takerSide: 'YES',
-    yesPriceCents: priceCents(price),
+    yesPriceCents: oddsPriceCents(price),
     size: shares(size),
     ts: timestampMs(seq * 1000),
   };
@@ -67,7 +67,7 @@ describe('resolution', () => {
 
     // Post-resolution: Σ locked == 0
     for (const u of ['alice', 'bob', 'carol', 'dave']) {
-      expect(core.getBalance(u).lockedCents).toBe(0);
+      expect(core.getBalance(u).lockedSettlementCollateralCents).toBe(0);
     }
     expect(core.getOpenInterest()).toBe(0);
 
@@ -97,7 +97,7 @@ describe('resolution', () => {
 
     // Post-resolution: Σ locked == 0
     for (const u of ['alice', 'bob', 'carol', 'dave']) {
-      expect(core.getBalance(u).lockedCents).toBe(0);
+      expect(core.getBalance(u).lockedSettlementCollateralCents).toBe(0);
     }
     expect(core.getOpenInterest()).toBe(0);
 
@@ -128,7 +128,7 @@ describe('resolution', () => {
     let total = 0;
     for (const u of users) {
       const bal = core.getBalance(u);
-      total += (bal.availableCents as number) + (bal.lockedCents as number);
+      total += (bal.availableBalanceCents as number) + (bal.lockedSettlementCollateralCents as number);
     }
     expect(total).toBe(startingTotal);
   });
