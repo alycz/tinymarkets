@@ -8,10 +8,10 @@ import {
 import type { MarketState, PriceCents, UsdCents } from '@jet/shared';
 import { loadConfig } from './config.js';
 import type { MmConfig } from './config.js';
-import { ApiClient } from './api-client.js';
+import { ApiClient } from '../lib/api-client.js';
 import { WsClient } from './ws-client.js';
 import { Quoter } from './quoter.js';
-import { fairYesProbCents } from './pricing.js';
+import { fairYesProbCents } from '../lib/pricing.js';
 
 async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));

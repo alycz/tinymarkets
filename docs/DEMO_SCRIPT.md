@@ -36,9 +36,11 @@ Default liquidity uses `market-maker-1` with three YES-book levels sized `50 / 1
 1. Observe the primary YES share-price chart and the separate BTC oracle reference price.
 2. Observe the YES book moving as the market maker quotes.
 3. Place a BUY YES order near the ask.
-4. Place a BUY NO order, or switch action/side to show the YES-book normalization.
-5. Confirm the account panel updates available cash, reserved order funds, signed position, average entry, unrealized PnL, and OI collateral share.
-6. Confirm recent trades update with trader, bought/sold side, side-specific price, size, and fill kind.
+4. Place a BUY YES order below the ask and confirm it rests in open orders.
+5. Place a BUY YES order at or above the ask and confirm it fills immediately instead of resting.
+6. Place a BUY NO order against the bid and point out the complement mapping: buying NO at 38c sells YES at 62c.
+7. Confirm the account panel updates available cash, reserved order funds, signed position, average entry, unrealized PnL, and OI collateral share.
+8. Confirm recent trades update with trader, bought/sold side, side-specific price, size, and fill kind. These trades come from CLOB fills, not synthetic bot events.
 
 ## 4. Arm The Oracle Demo
 
@@ -59,6 +61,7 @@ At resolution, inspect:
 
 - Final `VENUE_WEIGHTED_TWAP_V1` reference price.
 - Strict outcome rule: YES only if final price is above the strike.
+- Trading is disabled, open orders are cancelled, and bots stop until a new market opens.
 - User position at resolution.
 - Actual payout and realized PnL.
 - Sources used and excluded.

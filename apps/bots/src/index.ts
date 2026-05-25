@@ -1,2 +1,9 @@
-// @jet/bots — placeholder. To be implemented per BUILD_PLAN build order, steps 7 and 12.
-export {};
+export { ApiClient } from './lib/api-client.js';
+export {
+  buildLevelSpecs,
+  buildQuoteLadder,
+  dynamicSpreadCents,
+  fairYesProbCents,
+} from './lib/pricing.js';
+export { BotWsClient } from './lib/ws-client.js';
+export type { BotWsCallbacks } from './lib/ws-client.js';
