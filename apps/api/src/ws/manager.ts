@@ -1,8 +1,10 @@
 import type { WebSocket } from 'ws';
 import {
   type Channel,
+  type OrderBookSnapshot,
   type ServerEvent,
   parseChannel,
+  timestampMs,
 } from '@jet/shared';
 import { makeCountdownEvent, makeMarketSnapshotEvent, makeMarketStatusEvent } from '../events.js';
 import type { MarketSession } from '../session.js';
@@ -90,13 +92,18 @@ export class WsManager {
     if (kind === 'market') {
       const state = s.getMarketState();
       if (state?.config.marketId === id) {
-        this.sendTo(ws, makeMarketSnapshotEvent(state));
+        this.sendTo(ws, makeMarketSnapshotEvent(state, {
+          orderbook: s.getOrderBookSnapshot(),
+          recentTrades: s.getRecentTrades(),
+          oracle: s.getOracleSnapshot(),
+          sharePrice: s.getLatestSharePrice(),
+        }));
         this.sendTo(ws, makeMarketStatusEvent(state));
         this.sendTo(ws, makeCountdownEvent(state));
         if (state.status === 'resolved') {
           const resolution = s.getLastResolution();
           if (resolution) {
-            this.sendTo(ws, { type: 'resolution', resolution });
+            this.sendTo(ws, { type: 'resolution', marketId: state.config.marketId, resolution });
           }
         }
       }
@@ -105,42 +112,109 @@ export class WsManager {
       if (state?.config.marketId === id) {
         const book = s.getOrderBookSnapshot();
         if (book) {
-          this.sendTo(ws, { type: 'orderbook_snapshot', book });
+          this.sendTo(ws, makeBookSnapshotEvent(book));
         }
       }
     } else if (kind === 'trades') {
       const state = s.getMarketState();
       if (state?.config.marketId === id) {
-        for (const trade of s.getRecentTrades()) {
-          this.sendTo(ws, { type: 'trade', trade });
-        }
+        this.sendTo(ws, {
+          type: 'trades_snapshot',
+          marketId: state.config.marketId,
+          trades: s.getRecentTrades(),
+          ts: timestampMs(Date.now()),
+        });
       }
     } else if (kind === 'oracle') {
-      const snap = s.getOracleSnapshot();
-      if (snap?.marketId === id) {
-        this.sendTo(ws, { type: 'oracle_price', snapshot: snap });
-      }
-    } else if (kind === 'share') {
       const state = s.getMarketState();
       if (state?.config.marketId === id) {
-        for (const point of s.getSharePriceSeries()) {
-          this.sendTo(ws, { type: 'share_price', point });
+        this.sendTo(ws, {
+          type: 'oracle_series_snapshot',
+          marketId: state.config.marketId,
+          snapshots: s.getOracleSeries(),
+          ts: timestampMs(Date.now()),
+        });
+        const snap = s.getOracleSnapshot();
+        if (snap?.marketId === id) {
+          this.sendTo(ws, {
+            type: 'oracle_price',
+            marketId: snap.marketId,
+            tick: snap,
+            snapshot: snap,
+          });
+        }
+      }
+    } else if (kind === 'share' || kind === 'share_price') {
+      const state = s.getMarketState();
+      if (state?.config.marketId === id) {
+        const points = s.getSharePriceSeries();
+        const latest = s.getLatestSharePrice();
+        this.sendTo(ws, {
+          type: 'share_price_snapshot',
+          marketId: state.config.marketId,
+          points,
+          latest,
+          ts: timestampMs(Date.now()),
+        });
+        if (latest) {
+          this.sendTo(ws, {
+            type: 'share_price',
+            marketId: latest.marketId,
+            point: latest,
+          });
         }
       }
     } else if (kind === 'user') {
-      const snap = s.getUserSnapshot(id);
+      const parsed = parseChannel(ch);
+      const userId = parsed.userId ?? id;
+      const snap = s.getUserSnapshot(userId);
+      const state = s.getMarketState();
+      const marketId = parsed.marketId ?? state?.config.marketId;
+      if (parsed.marketId && state?.config.marketId !== parsed.marketId) return;
       if (snap) {
-        this.sendTo(ws, { type: 'balance_update', balance: snap.balance });
+        if (!marketId) return;
+        this.sendTo(ws, {
+          type: 'balance_snapshot',
+          userId: snap.userId,
+          marketId,
+          balance: snap.balance,
+        });
         for (const position of snap.positions) {
-          this.sendTo(ws, { type: 'position_update', position });
+          this.sendTo(ws, {
+            type: 'position_snapshot',
+            userId: snap.userId,
+            marketId: position.marketId,
+            position,
+          });
+        }
+        this.sendTo(ws, {
+          type: 'open_orders_snapshot',
+          userId: snap.userId,
+          marketId,
+          openOrders: snap.openOrders,
+        });
+        this.sendTo(ws, {
+          type: 'balance_update',
+          userId: snap.userId,
+          marketId,
+          balance: snap.balance,
+        });
+        for (const position of snap.positions) {
+          this.sendTo(ws, {
+            type: 'position_update',
+            userId: snap.userId,
+            marketId: position.marketId,
+            position,
+          });
         }
         this.sendTo(ws, {
           type: 'open_order',
           userId: snap.userId,
+          marketId,
           openOrders: snap.openOrders,
         });
         const resolution = s.getLastUserResolution(snap.userId);
-        if (resolution) {
+        if (resolution && resolution.marketId === marketId) {
           this.sendTo(ws, resolution);
         }
       }
@@ -183,4 +257,16 @@ export class WsManager {
       this.removeConnection(ws);
     }
   }
+}
+
+function makeBookSnapshotEvent(book: OrderBookSnapshot): ServerEvent {
+  return {
+    type: 'orderbook_snapshot',
+    marketId: book.marketId,
+    bids: book.bids,
+    asks: book.asks,
+    seq: book.seq,
+    ts: book.ts,
+    book,
+  };
 }

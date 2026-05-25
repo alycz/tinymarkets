@@ -107,7 +107,7 @@ async function runMarket(
     oracleChannel(marketId),
     marketChannel(marketId),
     bookChannel(marketId),
-    userChannel(config.botUserId),
+    userChannel(config.botUserId, marketId),
   ]);
   ws.connect();
 

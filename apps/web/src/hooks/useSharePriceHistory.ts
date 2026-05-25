@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ClientMessage, Result, ServerEvent, SharePricePoint, SharePriceSeriesResponse } from '@jet/shared';
-import { shareChannel } from '@jet/shared';
+import { sharePriceChannel } from '@jet/shared';
 import type { WsStatus } from './useWebSocket.js';
 
 export function useSharePriceHistory(
@@ -30,11 +30,15 @@ export function useSharePriceHistory(
 
   useEffect(() => {
     if (!marketId || wsStatus !== 'connected') return;
-    send({ type: 'subscribe', channels: [shareChannel(marketId)] });
+    send({ type: 'subscribe', channels: [sharePriceChannel(marketId)] });
   }, [marketId, wsStatus, send]);
 
   useEffect(() => {
     if (!lastEvent || !marketId) return;
+    if (lastEvent.type === 'share_price_snapshot' && lastEvent.marketId === marketId) {
+      setHistory(lastEvent.points.slice(-600));
+      return;
+    }
     if (lastEvent.type !== 'share_price' || lastEvent.point.marketId !== marketId) return;
     setHistory((prev) => [...prev, lastEvent.point].slice(-600));
   }, [lastEvent, marketId]);

@@ -61,6 +61,7 @@ export function useMarket(
           setServerTs(lastEvent.serverTs);
           setExpiryMs(lastEvent.market.expiryMs);
           setResolution(lastEvent.market.resolution ?? null);
+          setOracleSnapshot(lastEvent.oracle);
         }
         break;
       case 'market_status':
@@ -79,12 +80,12 @@ export function useMarket(
         }
         break;
       case 'oracle_price':
-        if (lastEvent.snapshot.marketId === marketId) {
-          setOracleSnapshot(lastEvent.snapshot);
+        if (lastEvent.marketId === marketId) {
+          setOracleSnapshot(lastEvent.tick);
         }
         break;
       case 'resolution':
-        if (lastEvent.resolution.marketId === marketId) {
+        if (lastEvent.marketId === marketId) {
           setResolution(lastEvent.resolution);
         }
         break;
