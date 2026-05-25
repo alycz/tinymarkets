@@ -30,7 +30,7 @@ export default function AccountPanel({ balance, position, contractMidCents }: Pr
     <Panel title="Account">
       <Row label="Available" value={formatUsdCents(available)} />
       <Row label="Reserved orders" value={formatUsdCents(reserved)} dim />
-      <Row label="Settlement collateral" value={formatUsdCents(locked)} dim />
+      <Row label="OI collateral share" value={formatUsdCents(locked)} dim />
       <div style={{ height: 1, background: C.border, margin: `${S.sm}px 0` }} />
       <Row
         label="Position"

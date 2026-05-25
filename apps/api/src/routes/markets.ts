@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
-import type { DemoScenarioRequest, MarketId, OracleDemoScenario } from '@jet/shared';
+import type { DemoScenarioRequest, OracleDemoScenario } from '@jet/shared';
 import type { MarketSession } from '../session.js';
+import { validateMarketId } from '../validators.js';
 
 const DEMO_SCENARIOS = new Set<OracleDemoScenario>(['NEAR_EXPIRY_SPIKE', 'SUBTLE_DISLOCATION']);
 
@@ -25,7 +26,12 @@ export function createMarketsRoutes(session: MarketSession) {
     fastify.post<{ Params: { marketId: string } }>(
       '/markets/:marketId/oracle/demo-spike',
       async (req, reply) => {
-        const result = session.armDemoScenario(req.params.marketId as MarketId, 'NEAR_EXPIRY_SPIKE');
+        const marketId = validateMarketId(req.params.marketId);
+        if (!marketId.ok) {
+          return reply.status(400).send({ ok: false, error: marketId.error });
+        }
+
+        const result = session.armDemoScenario(marketId.value, 'NEAR_EXPIRY_SPIKE');
         if (!result.ok) {
           const status = result.error.code === 'UNKNOWN_MARKET' ? 404 : 409;
           return reply.status(status).send(result);
@@ -37,6 +43,11 @@ export function createMarketsRoutes(session: MarketSession) {
     fastify.post<{ Params: { marketId: string }; Body: DemoScenarioRequest }>(
       '/markets/:marketId/oracle/demo',
       async (req, reply) => {
+        const marketId = validateMarketId(req.params.marketId);
+        if (!marketId.ok) {
+          return reply.status(400).send({ ok: false, error: marketId.error });
+        }
+
         const scenario = req.body?.scenario;
         if (!isDemoScenario(scenario)) {
           return reply.status(400).send({
@@ -44,7 +55,7 @@ export function createMarketsRoutes(session: MarketSession) {
             error: { code: 'VALIDATION', message: 'Unsupported oracle demo scenario' },
           });
         }
-        const result = session.armDemoScenario(req.params.marketId as MarketId, scenario);
+        const result = session.armDemoScenario(marketId.value, scenario);
         if (!result.ok) {
           const status = result.error.code === 'UNKNOWN_MARKET' ? 404 : 409;
           return reply.status(status).send(result);
@@ -56,8 +67,13 @@ export function createMarketsRoutes(session: MarketSession) {
     fastify.get<{ Params: { marketId: string } }>(
       '/markets/:marketId',
       async (req, reply) => {
+        const marketId = validateMarketId(req.params.marketId);
+        if (!marketId.ok) {
+          return reply.status(400).send({ ok: false, error: marketId.error });
+        }
+
         const state = session.getMarketState();
-        if (!state || state.config.marketId !== req.params.marketId) {
+        if (!state || state.config.marketId !== marketId.value) {
           return reply.status(404).send({
             ok: false,
             error: { code: 'UNKNOWN_MARKET', message: 'Market not found' },
@@ -70,8 +86,13 @@ export function createMarketsRoutes(session: MarketSession) {
     fastify.get<{ Params: { marketId: string } }>(
       '/markets/:marketId/orderbook',
       async (req, reply) => {
+        const marketId = validateMarketId(req.params.marketId);
+        if (!marketId.ok) {
+          return reply.status(400).send({ ok: false, error: marketId.error });
+        }
+
         const state = session.getMarketState();
-        if (!state || state.config.marketId !== req.params.marketId) {
+        if (!state || state.config.marketId !== marketId.value) {
           return reply.status(404).send({
             ok: false,
             error: { code: 'UNKNOWN_MARKET', message: 'Market not found' },
@@ -94,8 +115,13 @@ export function createMarketsRoutes(session: MarketSession) {
     }>(
       '/markets/:marketId/trades',
       async (req, reply) => {
+        const marketId = validateMarketId(req.params.marketId);
+        if (!marketId.ok) {
+          return reply.status(400).send({ ok: false, error: marketId.error });
+        }
+
         const state = session.getMarketState();
-        if (!state || state.config.marketId !== req.params.marketId) {
+        if (!state || state.config.marketId !== marketId.value) {
           return reply.status(404).send({
             ok: false,
             error: { code: 'UNKNOWN_MARKET', message: 'Market not found' },

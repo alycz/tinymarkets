@@ -13,6 +13,16 @@ interface PriceLevel {
   size: number;
 }
 
+export interface ClearedLevel {
+  side: 'BUY' | 'SELL';
+  yesPriceCents: PriceCents;
+}
+
+export interface ClearResult {
+  orders: CanonicalOrder[];
+  levels: ClearedLevel[];
+}
+
 /**
  * Single-market YES order book with price-time priority.
  * Bids sorted DESC, asks sorted ASC. Max 99 distinct price points — array is fine.
@@ -91,6 +101,24 @@ export class OrderBook {
     }
     order.status = 'CANCELLED';
     return order;
+  }
+
+  clear(): ClearResult {
+    const orders = Array.from(this.orderIndex.values());
+    const levels: ClearedLevel[] = [
+      ...this.bids.map((level) => ({ side: 'BUY' as const, yesPriceCents: level.yesPriceCents })),
+      ...this.asks.map((level) => ({ side: 'SELL' as const, yesPriceCents: level.yesPriceCents })),
+    ];
+
+    for (const order of orders) {
+      order.status = 'CANCELLED';
+    }
+
+    this.bids.length = 0;
+    this.asks.length = 0;
+    this.orderIndex.clear();
+
+    return { orders, levels };
   }
 
   getOrder(orderId: OrderId): CanonicalOrder | undefined {
