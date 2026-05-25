@@ -45,6 +45,7 @@ pnpm demo
 
 ```bash
 pnpm dev        # API + web
+pnpm bots       # market maker + takers
 pnpm dev:bots   # market maker + takers
 pnpm demo       # API + web + market maker + takers
 ```
@@ -53,7 +54,9 @@ Local defaults require no env exports:
 
 - API: `PORT=3001`, `HOST=0.0.0.0`, localhost CORS origins.
 - Web: `VITE_API_URL=http://localhost:3001`, `VITE_WS_URL=ws://localhost:3001/ws`, `VITE_DEMO_USER_ID=demo`.
-- Bots: `API_BASE_URL=http://localhost:3001`, `WS_URL=ws://localhost:3001/ws`.
+- Bots: `API_BASE_URL=http://localhost:3001`, `WS_URL=ws://localhost:3001/ws`, `BOT_USER_ID=market-maker-1`, `NUM_TAKERS=75`, `LEVEL_SIZES=50,100,150`.
+
+Bots submit normal REST orders through `POST /orders`; they do not write trades, books, or charts directly. The market maker reconciles its resting YES-book orders each tick, while the taker swarm sends IOC `BUY_YES` and `BUY_NO` flow that crosses the spread through the backend CLOB.
 
 Use the `.env.example` files only when you want to override those defaults.
 

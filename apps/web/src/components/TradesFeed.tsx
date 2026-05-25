@@ -15,7 +15,7 @@ const KIND_LABEL: Record<Trade['kind'], string> = {
 };
 
 export default function TradesFeed({ trades }: Props) {
-  const visible = trades.slice(0, 20);
+  const visible = trades.flatMap(activityRows).slice(0, 20);
   return (
     <Panel title="Recent Trades">
       {visible.length === 0 ? (
@@ -25,8 +25,8 @@ export default function TradesFeed({ trades }: Props) {
       ) : (
         <div>
           <Header />
-          {visible.map((t) => (
-            <TradeRow key={t.tradeId} trade={t} />
+          {visible.map((activity) => (
+            <TradeRow key={`${activity.trade.tradeId}-${activity.role}`} activity={activity} />
           ))}
         </div>
       )}
@@ -38,7 +38,8 @@ function Header() {
   return (
     <div style={{ ...row, color: C.textMute, fontSize: 10, letterSpacing: '0.08em', marginBottom: S.xs }}>
       <span>AGE</span>
-      <span>SIDE</span>
+      <span>TRADER</span>
+      <span>ACTION</span>
       <span>PRICE</span>
       <span style={{ textAlign: 'right' }}>SIZE</span>
       <span>KIND</span>
@@ -46,16 +47,29 @@ function Header() {
   );
 }
 
-function TradeRow({ trade }: { trade: Trade }) {
+interface ActivityRow {
+  role: 'taker' | 'maker';
+  trade: Trade;
+  userId: string;
+  side: 'YES' | 'NO';
+  action: 'bought' | 'sold';
+  priceCents: number;
+}
+
+function TradeRow({ activity }: { activity: ActivityRow }) {
+  const { trade } = activity;
   const age = formatAge(Date.now() - trade.ts);
-  const sideColor = trade.takerSide === 'YES' ? C.yes : C.no;
+  const sideColor = activity.side === 'YES' ? C.yes : C.no;
 
   return (
     <div style={{ ...row, fontSize: 12, marginBottom: 3 }}>
       <span style={{ color: C.textMute }}>{age}</span>
-      <span style={{ color: sideColor, fontWeight: 600 }}>{trade.takerSide}</span>
+      <span style={{ color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {activity.userId}
+      </span>
+      <span style={{ color: sideColor, fontWeight: 600 }}>{activity.action} {activity.side}</span>
       <span style={{ color: C.text }}>
-        {formatPriceCents(trade.yesPriceCents)}
+        {formatPriceCents(activity.priceCents as Trade['yesPriceCents'])}
       </span>
       <span style={{ color: C.text, textAlign: 'right' }}>{trade.size as number}</span>
       <span style={{ color: C.textMute }}>{KIND_LABEL[trade.kind]}</span>
@@ -63,8 +77,40 @@ function TradeRow({ trade }: { trade: Trade }) {
   );
 }
 
+function activityRows(trade: Trade): ActivityRow[] {
+  const takerYesAction = trade.takerYesAction ?? (trade.takerSide === 'YES' ? 'BUY' : 'SELL');
+  const makerYesAction = trade.makerYesAction ?? (takerYesAction === 'BUY' ? 'SELL' : 'BUY');
+  return [
+    {
+      role: 'taker',
+      trade,
+      userId: trade.takerUserId ?? 'taker',
+      side: trade.takerSide,
+      action: displayAction(trade.takerSide, takerYesAction),
+      priceCents: displayPrice(trade.takerSide, trade.yesPriceCents as number),
+    },
+    {
+      role: 'maker',
+      trade,
+      userId: trade.makerUserId ?? 'maker',
+      side: 'YES',
+      action: makerYesAction === 'BUY' ? 'bought' : 'sold',
+      priceCents: trade.yesPriceCents as number,
+    },
+  ];
+}
+
+function displayAction(side: 'YES' | 'NO', yesAction: 'BUY' | 'SELL'): 'bought' | 'sold' {
+  if (side === 'YES') return yesAction === 'BUY' ? 'bought' : 'sold';
+  return yesAction === 'SELL' ? 'bought' : 'sold';
+}
+
+function displayPrice(side: 'YES' | 'NO', yesPriceCents: number): number {
+  return side === 'YES' ? yesPriceCents : 100 - yesPriceCents;
+}
+
 const row = {
   display: 'grid',
-  gridTemplateColumns: '3fr 2fr 2fr 2fr 3fr',
+  gridTemplateColumns: '2fr 4fr 3fr 2fr 2fr 2fr',
   gap: S.xs,
 } as const;

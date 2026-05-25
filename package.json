@@ -10,6 +10,7 @@
     "test": "pnpm -r --if-present test",
     "build": "pnpm -r --if-present build",
     "dev": "concurrently -k -n api,web -c cyan,green \"pnpm --filter @jet/api dev\" \"pnpm --filter @jet/web dev\"",
+    "bots": "pnpm dev:bots",
     "dev:bots": "concurrently -k -n mm,takers -c magenta,yellow \"pnpm --filter @jet/bots dev\" \"pnpm --filter @jet/bots dev:takers\"",
     "demo": "concurrently -k -n api,web,mm,takers -c cyan,green,magenta,yellow \"pnpm --filter @jet/api dev\" \"pnpm --filter @jet/web dev\" \"pnpm --filter @jet/bots dev\" \"pnpm --filter @jet/bots dev:takers\""
   },

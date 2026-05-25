@@ -4,25 +4,20 @@ import type { TakersConfig } from './config.js';
 export interface TakerPersona {
   userId: UserId;
   handle: string;
-  lean: number;
-  fade: number;
-  sizeScale: number;
-  intervalMs: number;
+  contrarianRatio: number;
+  maxSlippageCents: number;
 }
 
 export function buildPersonas(config: TakersConfig): TakerPersona[] {
   const personas: TakerPersona[] = [];
 
   for (let i = 0; i < config.numTakers; i++) {
-    const suffix = String(i + 1).padStart(2, '0');
-    const intervalRange = config.maxIntervalMs - config.minIntervalMs;
+    const suffix = String(i + 1).padStart(3, '0');
     personas.push({
       userId: `${config.userIdPrefix}-${suffix}`,
       handle: `taker${suffix}`,
-      lean: randomBetween(0.6, 1.3),
-      fade: Math.random() < config.fadeRatio ? 0.15 : 0,
-      sizeScale: randomInt(1, 5),
-      intervalMs: Math.round(config.minIntervalMs + Math.random() * intervalRange),
+      contrarianRatio: randomBetween(config.minContrarianRatio, config.maxContrarianRatio),
+      maxSlippageCents: randomInt(0, 2),
     });
   }
 

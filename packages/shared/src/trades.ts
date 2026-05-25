@@ -44,6 +44,11 @@ export interface Trade {
   kind: TradeKind;
   /** side from the aggressor's perspective, for the activity feed (Above/Below) */
   takerSide: Side;
+  /** Optional participant metadata for human-readable activity rows. */
+  takerUserId?: UserId;
+  makerUserId?: UserId;
+  takerYesAction?: 'BUY' | 'SELL';
+  makerYesAction?: 'BUY' | 'SELL';
   ts: TimestampMs;
 }
 
