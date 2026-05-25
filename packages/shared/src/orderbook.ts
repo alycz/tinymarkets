@@ -4,6 +4,8 @@ export interface OrderBookLevel {
   yesPriceCents: PriceCents;
   /** aggregate resting size at this price level */
   size: Shares;
+  /** number of resting orders aggregated into this level */
+  orderCount: number;
 }
 
 export interface OrderBookSnapshot {
@@ -22,6 +24,8 @@ export interface OrderBookDeltaChange {
   yesPriceCents: PriceCents;
   /** new aggregate size at this level; size 0 means the level was removed */
   size: Shares;
+  /** new aggregate order count at this level; 0 means the level was removed */
+  orderCount: number;
 }
 
 export interface OrderBookDelta {

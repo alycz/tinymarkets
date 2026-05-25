@@ -49,9 +49,13 @@ export function useOrderBook(
             if (idx !== -1) levels.splice(idx, 1);
           } else if (idx !== -1) {
             // noUncheckedIndexedAccess: idx is known valid, assert defined
-            levels[idx] = { ...levels[idx]!, size: change.size };
+            levels[idx] = { ...levels[idx]!, size: change.size, orderCount: change.orderCount };
           } else {
-            levels.push({ yesPriceCents: change.yesPriceCents, size: change.size });
+            levels.push({
+              yesPriceCents: change.yesPriceCents,
+              size: change.size,
+              orderCount: change.orderCount,
+            });
           }
         }
         newBids.sort((a, b) => b.yesPriceCents - a.yesPriceCents);

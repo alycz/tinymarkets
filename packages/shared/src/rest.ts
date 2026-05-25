@@ -25,6 +25,7 @@ import type { OrderId } from './units';
  *   POST /orders            (PlaceOrderRequest)        -> PlaceOrderResponse
  *   POST /orders/:orderId/cancel                       -> CancelOrderResponse
  *   POST /markets/start-demo                           -> StartDemoResponse
+ *   POST /markets/:marketId/resolve                    -> forced local demo resolution
  *   POST /markets/:marketId/oracle/demo                -> DemoScenarioResponse
  *   POST /markets/:marketId/oracle/demo-spike          -> DemoSpikeResponse
  */
@@ -74,5 +75,13 @@ export interface HealthResponse {
 }
 
 export type { PlaceOrderRequest };
-export type PlaceOrderResponse = Result<{ order: CanonicalOrder; fills: Fill[] }>;
+export type PlaceOrderResponse = Result<{
+  /** Canonical YES-book order created from the user-facing request. */
+  order: CanonicalOrder;
+  fills: Fill[];
+  /** Present when a GTC order has resting quantity after matching. */
+  remainingOpenOrder?: CanonicalOrder;
+  balance: Balance;
+  position: Position;
+}>;
 export type CancelOrderResponse = Result<{ orderId: OrderId }>;

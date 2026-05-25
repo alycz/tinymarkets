@@ -94,6 +94,49 @@ describe('REST boundary validation', () => {
     });
     expect(valid.statusCode).toBe(200);
     expect(valid.json()).toMatchObject({ ok: true });
+
+    const validIntent = await server.inject({
+      method: 'POST',
+      url: '/orders',
+      payload: {
+        userId: 'userB',
+        marketId: market.config.marketId,
+        intent: 'BUY_NO',
+        price: 40,
+        type: 'LIMIT',
+        size: 2,
+        clientOrderId: 'client-2',
+      },
+    });
+    expect(validIntent.statusCode).toBe(200);
+    expect(validIntent.json()).toMatchObject({
+      ok: true,
+      order: {
+        yesAction: 'SELL',
+        yesPriceCents: 60,
+        display: { side: 'NO', action: 'BUY', oddsPriceCents: 40 },
+      },
+      balance: { userId: 'userB' },
+      position: { userId: 'userB' },
+    });
+
+    const conflicting = await server.inject({
+      method: 'POST',
+      url: '/orders',
+      payload: {
+        userId: 'userC',
+        marketId: market.config.marketId,
+        intent: 'BUY_YES',
+        price: 55,
+        side: 'NO',
+        action: 'BUY',
+        oddsPriceCents: 45,
+        type: 'LIMIT',
+        size: 1,
+      },
+    });
+    expect(conflicting.statusCode).toBe(400);
+    expect(conflicting.json()).toMatchObject({ ok: false, error: { code: 'VALIDATION' } });
   });
 
   it('rejects invalid route ids for market, user, and cancel endpoints', async () => {
