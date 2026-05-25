@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { DemoScenarioRequest, MarketId, OracleDemoScenario } from '@jet/shared';
 import type { MarketSession } from '../session.js';
+import { validateMarketId } from '../validators.js';
 
 const DEMO_SCENARIOS = new Set<OracleDemoScenario>(['NEAR_EXPIRY_SPIKE', 'SUBTLE_DISLOCATION']);
 
@@ -56,8 +57,13 @@ export function createMarketsRoutes(session: MarketSession) {
     fastify.get<{ Params: { marketId: string } }>(
       '/markets/:marketId',
       async (req, reply) => {
+        const marketId = validateMarketId(req.params.marketId);
+        if (!marketId.ok) {
+          return reply.status(400).send({ ok: false, error: marketId.error });
+        }
+
         const state = session.getMarketState();
-        if (!state || state.config.marketId !== req.params.marketId) {
+        if (!state || state.config.marketId !== marketId.value) {
           return reply.status(404).send({
             ok: false,
             error: { code: 'UNKNOWN_MARKET', message: 'Market not found' },
@@ -70,8 +76,13 @@ export function createMarketsRoutes(session: MarketSession) {
     fastify.get<{ Params: { marketId: string } }>(
       '/markets/:marketId/orderbook',
       async (req, reply) => {
+        const marketId = validateMarketId(req.params.marketId);
+        if (!marketId.ok) {
+          return reply.status(400).send({ ok: false, error: marketId.error });
+        }
+
         const state = session.getMarketState();
-        if (!state || state.config.marketId !== req.params.marketId) {
+        if (!state || state.config.marketId !== marketId.value) {
           return reply.status(404).send({
             ok: false,
             error: { code: 'UNKNOWN_MARKET', message: 'Market not found' },
@@ -94,8 +105,13 @@ export function createMarketsRoutes(session: MarketSession) {
     }>(
       '/markets/:marketId/trades',
       async (req, reply) => {
+        const marketId = validateMarketId(req.params.marketId);
+        if (!marketId.ok) {
+          return reply.status(400).send({ ok: false, error: marketId.error });
+        }
+
         const state = session.getMarketState();
-        if (!state || state.config.marketId !== req.params.marketId) {
+        if (!state || state.config.marketId !== marketId.value) {
           return reply.status(404).send({
             ok: false,
             error: { code: 'UNKNOWN_MARKET', message: 'Market not found' },

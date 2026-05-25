@@ -16,6 +16,7 @@ import {
   type SignedShares,
   type Trade,
   type UserId,
+  type UserResolutionEvent,
   type UserSnapshot,
   shares,
   signedShares,
@@ -57,6 +58,7 @@ export class MarketSession {
 
   private knownUsers = new Set<UserId>();
   private lastResolution: RampResolution | null = null;
+  private lastUserResolutions = new Map<UserId, UserResolutionEvent>();
   private broadcaster: Broadcaster | null = null;
 
   constructor(opts?: { oracleScenario?: ScenarioName; seed?: number; demoMode?: DemoMode }) {
@@ -98,6 +100,7 @@ export class MarketSession {
     this.orderReserves = new Map();
     this.knownUsers = new Set();
     this.lastResolution = null;
+    this.lastUserResolutions = new Map();
 
     this.oracle.start(marketId, this.config, timestampMs(expiry));
     this.tickInterval = setInterval(() => this.tick(), 1000);
@@ -115,6 +118,7 @@ export class MarketSession {
     this.openedAtMs = null;
     this.config = null;
     this.orderReserves = new Map();
+    this.lastUserResolutions = new Map();
   }
 
   getMarketId(): MarketId | null {
@@ -305,6 +309,7 @@ export class MarketSession {
 
     if (msRemaining <= 0 && this.status === 'open') {
       this.status = 'resolving';
+      this.cleanupRestingOrdersForResolution();
       const state = this.buildMarketState();
       this.broadcaster?.marketStatus(state);
       this.resolveTimeout = setTimeout(() => this.resolveMarket(), 2000);
@@ -327,7 +332,7 @@ export class MarketSession {
       preResolveNets.set(uid, this.marketCore.getPosition(uid).net);
     }
 
-    const { realizedPnlCents } = this.marketCore.resolve(resolution.outcome, now);
+    const { payouts, realizedPnlCents } = this.marketCore.resolve(resolution.outcome, now);
 
     this.status = 'resolved';
     this.lastResolution = resolution;
@@ -340,14 +345,17 @@ export class MarketSession {
       const bal = this.marketCore.getBalance(userId);
       const pos = this.marketCore.getPosition(userId);
       const netAtResolution = preResolveNets.get(userId) ?? signedShares(0);
-
-      this.broadcaster?.userResolution(userId, {
+      const userResolution: UserResolutionEvent = {
+        type: 'user:resolution',
         marketId: this.config.marketId,
         outcome: resolution.outcome,
         netAtResolution,
-        payoutCents: usdCents(Math.max(0, bal.availableBalanceCents as number)),
+        payoutCents: payouts.get(userId) ?? usdCents(0),
         pnlCents,
-      });
+      };
+
+      this.lastUserResolutions.set(userId, userResolution);
+      this.broadcaster?.userResolution(userId, userResolution);
       this.broadcaster?.userBalance(userId, bal);
       this.broadcaster?.userPosition(userId, pos);
     }
@@ -364,6 +372,29 @@ export class MarketSession {
     if (this.resolveTimeout) {
       clearTimeout(this.resolveTimeout);
       this.resolveTimeout = null;
+    }
+  }
+
+  private cleanupRestingOrdersForResolution(): void {
+    if (!this.marketCore || !this.clob) return;
+
+    const affectedUsers = new Set<UserId>();
+    for (const reserve of this.orderReserves.values()) {
+      this.marketCore.releaseOrderReserve(reserve.userId, usdCents(reserve.remainingCents));
+      affectedUsers.add(reserve.userId);
+    }
+    this.orderReserves.clear();
+
+    const { delta } = this.clob.clearOpenOrders();
+    if (delta) {
+      this.broadcaster?.bookDelta(delta);
+    }
+
+    const snapshot = this.clob.snapshot();
+    this.broadcaster?.bookSnapshot(snapshot);
+
+    for (const userId of affectedUsers) {
+      this.broadcaster?.userBalance(userId, this.marketCore.getBalance(userId));
     }
   }
 

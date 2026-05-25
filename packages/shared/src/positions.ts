@@ -7,7 +7,7 @@ export interface Balance {
   availableBalanceCents: UsdCents;
   /** cash reserved behind resting orders; not settlement collateral */
   reservedForOrdersCents: UsdCents;
-  /** cash backing open positions; must equal openInterestShares * 100 globally */
+  /** simplified per-user share of open-interest collateral; must equal openInterestShares * 100 globally */
   lockedSettlementCollateralCents: UsdCents;
   /** signed realized PnL for this market */
   realizedPnlCents: number;
