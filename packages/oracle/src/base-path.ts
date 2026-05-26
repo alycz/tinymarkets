@@ -7,6 +7,8 @@ import { makeRng } from './prng.js';
  */
 export type BasePathFn = (elapsedMs: number) => UsdCents;
 
+const RANDOM_WALK_STEP_CENTS = 400;
+
 /**
  * Pre-rolls a random walk BTC price path.
  * @param seed - deterministic seed
@@ -24,8 +26,8 @@ export function makeRandomWalkPath(
   path[0] = startCents;
   const rng = makeRng(seed);
   for (let i = 1; i < nBuckets; i++) {
-    // ~$5/s drift = 500 cents/s = 50 cents/100ms bucket
-    const delta = Math.round((rng() - 0.5) * 100);
+    // Demo tuning: visibly moves the 2-minute market while preserving seeded determinism.
+    const delta = Math.round((rng() - 0.5) * RANDOM_WALK_STEP_CENTS);
     path[i] = (path[i - 1] ?? startCents) + delta;
   }
   return (elapsedMs: number): UsdCents => {

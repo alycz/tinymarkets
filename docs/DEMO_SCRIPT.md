@@ -29,7 +29,7 @@ pnpm dev:bots
 
 The market maker quotes both sides of the YES book. The taker process sends noisy IOC flow so trades and account updates move during the 2-minute market.
 
-Default liquidity uses `market-maker-1` with three YES-book levels sized `50 / 100 / 150` and a 75-persona taker swarm (`taker-001` through `taker-075`). Takers submit normal `POST /orders` requests, including `BUY_NO` orders that the backend normalizes into SELL-YES orders at the complement price.
+Default liquidity uses `market-maker-1` with five YES-book levels sized `25 / 50 / 100 / 150 / 250`, a 1-cent fair-value requote threshold, and a 75-persona taker swarm (`taker-001` through `taker-075`). Takers submit normal `POST /orders`, including `BUY_NO` orders that the backend normalizes into SELL-YES orders at the complement price.
 
 ## 3. Show The Trading Loop
 

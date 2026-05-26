@@ -24,7 +24,7 @@ export function loadConfig(): TakersConfig {
     rateLimitTps: Math.max(0.1, floatEnv('RATE_LIMIT_TPS', 6)),
     minIntervalMs,
     maxIntervalMs,
-    volatilityScaleCents: Math.max(1, intEnv('FAIR_VALUE_VOL_SCALE_CENTS', 50000)),
+    volatilityScaleCents: Math.max(1, intEnv('FAIR_VALUE_VOL_SCALE_CENTS', 25000)),
     minContrarianRatio: clamp(floatEnv('MIN_CONTRARIAN_RATIO', 0.2), 0, 1),
     maxContrarianRatio: clamp(floatEnv('MAX_CONTRARIAN_RATIO', 0.35), 0, 1),
     userIdPrefix: process.env['USER_ID_PREFIX'] ?? 'taker',

@@ -21,7 +21,7 @@ export function parseLevelSizes(raw: string): number[] {
     .split(',')
     .map((part) => parseInt(part.trim(), 10))
     .filter((size) => Number.isInteger(size) && size > 0);
-  return sizes.length > 0 ? sizes : [50, 100, 150];
+  return sizes.length > 0 ? sizes : [25, 50, 100, 150, 250];
 }
 
 export function readApiBaseUrl(): string {
