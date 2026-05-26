@@ -15,6 +15,9 @@ import { C, S, T, sans } from './theme.js';
 export default function App() {
   const [marketId, setMarketId] = useState<string | null>(null);
   const [config, setConfig] = useState<MarketConfig | null>(null);
+  const [launching, setLaunching] = useState(false);
+  const [launchError, setLaunchError] = useState<string | null>(null);
+  const [slowLaunch, setSlowLaunch] = useState(false);
 
   const { send, lastEvent, status } = useWebSocket(WS_URL);
   const { marketStatus, msRemaining, serverTs, openInterest, oracleSnapshot, resolution } = useMarket(
@@ -53,13 +56,28 @@ export default function App() {
   const showStartNew = marketStatus === 'resolved' || resolution != null;
 
   const startDemo = useCallback(async () => {
-    const res = await fetch(`${API_URL}/markets/start-demo`, { method: 'POST' });
-    const data: Result<StartDemoResponse> = await res.json();
-    if (data.ok && data.market) {
+    if (launching) return;
+    setLaunching(true);
+    setLaunchError(null);
+    setSlowLaunch(false);
+    const slowTimer = setTimeout(() => setSlowLaunch(true), 10_000);
+    try {
+      const res = await fetch(`${API_URL}/markets/start-demo`, { method: 'POST' });
+      const data: Result<StartDemoResponse> = await res.json();
+      if (!res.ok || !data.ok || !data.market) {
+        setLaunchError('Unable to start market. Please try again.');
+        return;
+      }
       setMarketId(data.market.config.marketId);
       setConfig(data.market.config);
+    } catch {
+      setLaunchError('Unable to start market. Please try again.');
+    } finally {
+      clearTimeout(slowTimer);
+      setSlowLaunch(false);
+      setLaunching(false);
     }
-  }, []);
+  }, [launching]);
 
   return (
     <div style={{ background: C.bg, minHeight: '100vh', fontFamily: sans, color: C.text }}>
@@ -73,9 +91,20 @@ export default function App() {
           </nav>
         </div>
         {showStartNew && (
-          <button onClick={() => void startDemo()} style={headerNewMarketBtn}>
-            Start New Market
-          </button>
+          <div style={headerLaunchWrapStyle}>
+            {launchError && <span style={headerErrorStyle}>{launchError}</span>}
+            <button
+              onClick={() => void startDemo()}
+              disabled={launching}
+              style={{
+                ...headerNewMarketBtn,
+                opacity: launching ? 0.6 : 1,
+                cursor: launching ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {launching ? 'Launching Market...' : 'Start New Market'}
+            </button>
+          </div>
         )}
       </header>
 
@@ -113,9 +142,26 @@ export default function App() {
               <br />
               To Open The Live Trading Workspace.
             </p>
-            <button onClick={() => void startDemo()} style={primaryBtn}>
-              Start Demo Market
+            <button
+              onClick={() => void startDemo()}
+              disabled={launching}
+              style={{
+                ...primaryBtn,
+                opacity: launching ? 0.6 : 1,
+                cursor: launching ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {launching ? 'Launching Market...' : 'Start Demo Market'}
             </button>
+            {launching && (
+              <div style={launchHelperStyle}>
+                Starting demo market. This can take a few seconds if the API is waking up.
+                {slowLaunch && (
+                  <div style={launchHelperEmphStyle}>Still launching — please wait.</div>
+                )}
+              </div>
+            )}
+            {launchError && <div style={launchErrorStyle}>{launchError}</div>}
           </div>
         </div>
       )}
@@ -226,4 +272,33 @@ const primaryBtn: CSSProperties = {
   fontFamily: 'inherit',
   fontWeight: 700,
   letterSpacing: '0.02em',
+};
+
+const launchHelperStyle: CSSProperties = {
+  marginTop: S.sm,
+  color: C.textDim,
+  fontSize: 12,
+  lineHeight: 1.5,
+};
+
+const launchHelperEmphStyle: CSSProperties = {
+  marginTop: 4,
+  color: C.text,
+};
+
+const launchErrorStyle: CSSProperties = {
+  marginTop: S.sm,
+  color: C.bad,
+  fontSize: 12,
+};
+
+const headerLaunchWrapStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: S.sm,
+};
+
+const headerErrorStyle: CSSProperties = {
+  color: C.bad,
+  fontSize: 11,
 };
