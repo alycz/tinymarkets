@@ -90,9 +90,9 @@ describe('buildQuoteLadder', () => {
   });
 
   it('emits configured level sizes', () => {
-    const levels = buildQuoteLadder(oddsPriceCents(50), buildLevelSpecs(5, [50, 100, 150]));
-    expect(levels.filter(l => l.side === 'BID').map(l => l.size)).toEqual([50, 100, 150]);
-    expect(levels.filter(l => l.side === 'ASK').map(l => l.size)).toEqual([50, 100, 150]);
+    const levels = buildQuoteLadder(oddsPriceCents(50), buildLevelSpecs(5, [25, 50, 100, 150, 250]));
+    expect(levels.filter(l => l.side === 'BID').map(l => l.size)).toEqual([25, 50, 100, 150, 250]);
+    expect(levels.filter(l => l.side === 'ASK').map(l => l.size)).toEqual([25, 50, 100, 150, 250]);
   });
 
   it('no duplicate prices within a side (deduplicates clamped levels)', () => {
