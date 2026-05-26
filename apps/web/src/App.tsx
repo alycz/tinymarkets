@@ -19,6 +19,7 @@ export default function App() {
   const { send, lastEvent, status } = useWebSocket(WS_URL);
   const { marketStatus, msRemaining, serverTs, openInterest, oracleSnapshot, resolution } = useMarket(
     marketId,
+    API_URL,
     send,
     lastEvent,
     status,
@@ -49,6 +50,8 @@ export default function App() {
       .catch(() => {});
   }, []);
 
+  const showStartNew = marketStatus === 'resolved' || resolution != null;
+
   const startDemo = useCallback(async () => {
     const res = await fetch(`${API_URL}/markets/start-demo`, { method: 'POST' });
     const data: Result<StartDemoResponse> = await res.json();
@@ -69,6 +72,11 @@ export default function App() {
             </a>
           </nav>
         </div>
+        {showStartNew && (
+          <button onClick={() => void startDemo()} style={headerNewMarketBtn}>
+            Start New Market
+          </button>
+        )}
       </header>
 
       {marketId && config && marketStatus ? (
@@ -94,7 +102,6 @@ export default function App() {
           sharePriceHistory={sharePriceHistory}
           userId={DEMO_USER_ID}
           apiUrl={API_URL}
-          onStartNew={() => void startDemo()}
         />
       ) : (
         <div style={emptyStyle}>
@@ -155,6 +162,19 @@ const navItemActiveStyle: CSSProperties = {
   textDecoration: 'none',
   borderBottom: `2px solid ${C.accent}`,
   marginBottom: -1,
+  letterSpacing: '0.02em',
+};
+
+const headerNewMarketBtn: CSSProperties = {
+  background: C.accent,
+  color: '#ffffff',
+  border: 'none',
+  borderRadius: 0,
+  padding: '0.45rem 0.9rem',
+  cursor: 'pointer',
+  fontSize: 12,
+  fontFamily: 'inherit',
+  fontWeight: 700,
   letterSpacing: '0.02em',
 };
 

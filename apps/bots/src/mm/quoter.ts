@@ -40,7 +40,11 @@ export class Quoter {
       msTotal: opts.msTotal,
     });
     const levelSpecs = buildLevelSpecs(spread, this.config.levelSizes);
-    const targetLadder = buildQuoteLadder(fairCents, levelSpecs);
+    const targetLadder = buildQuoteLadder(fairCents, levelSpecs).map((level) => ({
+      ...level,
+      size: this.jitterSize(level.size),
+      maxSize: this.maxJitterSize(level.size),
+    }));
     const targets = new Map(targetLadder.map((level) => [levelKey(level.side, level.oddsPriceCents), level]));
     const openOrders = (await this.api.getOpenOrders(this.config.botUserId))
       .filter((order) => order.marketId === this.marketId)
@@ -69,11 +73,11 @@ export class Quoter {
 
       for (const order of existing) {
         const remaining = order.remaining as number;
-        if (keptSize >= target.size) {
+        if (keptSize >= target.maxSize) {
           if (await this.cancel(order.orderId)) cancelled++;
           continue;
         }
-        if (keptSize + remaining <= target.size) {
+        if (keptSize + remaining <= target.maxSize) {
           keptSize += remaining;
           continue;
         }
@@ -122,6 +126,17 @@ export class Quoter {
       console.error(`[quoter] place failed ${side}:${oddsPriceCents}:`, err);
       return false;
     }
+  }
+
+  private jitterSize(baseSize: number): number {
+    const min = this.config.sizeJitterMin;
+    const max = this.config.sizeJitterMax;
+    const factor = max > min ? min + Math.random() * (max - min) : min;
+    return Math.max(1, Math.round(baseSize * factor));
+  }
+
+  private maxJitterSize(baseSize: number): number {
+    return Math.max(1, Math.round(baseSize * this.config.sizeJitterMax));
   }
 
   private async cancel(orderId: string): Promise<boolean> {

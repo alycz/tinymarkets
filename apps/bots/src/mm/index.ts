@@ -50,7 +50,7 @@ async function runMarket(
   let msRemaining = market.msRemaining;
   const recentOraclePrices: number[] = [];
   let stopped = false;
-  let timer: ReturnType<typeof setInterval> | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
   let guardTimer: ReturnType<typeof setInterval> | null = null;
   const activeTicks = new Set<Promise<void>>();
   let resolveMarket: (() => void) | null = null;
@@ -63,7 +63,7 @@ async function runMarket(
     if (stopped) return;
     stopped = true;
     if (timer !== null) {
-      clearInterval(timer);
+      clearTimeout(timer);
       timer = null;
     }
     if (guardTimer !== null) {
@@ -89,6 +89,15 @@ async function runMarket(
       });
     activeTicks.add(tick);
     lastQuotedFair = currentFair;
+  };
+
+  const scheduleHeartbeat = (): void => {
+    if (stopped) return;
+    timer = setTimeout(() => {
+      timer = null;
+      doTick();
+      scheduleHeartbeat();
+    }, nextRequoteDelay(config));
   };
 
   const ws = new WsClient(config.wsUrl, {
@@ -147,8 +156,8 @@ async function runMarket(
       });
   }, 2_000);
 
-  // Heartbeat: requote even when oracle is quiet
-  timer = setInterval(doTick, config.requoteMs);
+  // Heartbeat: requote even when oracle is quiet.
+  scheduleHeartbeat();
 
   await done;
 
@@ -166,6 +175,14 @@ async function runMarket(
 function recentVolatility(prices: number[]): number {
   if (prices.length < 2) return 0;
   return Math.max(...prices) - Math.min(...prices);
+}
+
+function nextRequoteDelay(config: MmConfig): number {
+  if (config.requoteJitterRatio <= 0) return config.requoteMs;
+  const minFactor = 1 - config.requoteJitterRatio;
+  const maxFactor = 1 + config.requoteJitterRatio;
+  const factor = minFactor + Math.random() * (maxFactor - minFactor);
+  return Math.max(250, Math.round(config.requoteMs * factor));
 }
 
 async function main(): Promise<void> {

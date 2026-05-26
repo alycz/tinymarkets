@@ -173,16 +173,16 @@ function PreResolution({
           value={formatUsdCents(snapshot.btcPriceCents)}
           note="Indicative Only — Final Result Uses 15s TWAP"
         />
-        <div>
+        <div style={metricCenterStyle}>
           <div style={metaLabel}>Venue Disagreement</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: S.xs }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: S.xs }}>
             <span style={{ fontSize: 14, color: C.text }}>{formatBps(snapshot.dispersionBps)}</span>
             <Pill text={prettyEnum(snapshot.dispersionState)} color={dispColor} />
           </div>
         </div>
-        <div>
+        <div style={metricRightStyle}>
           <div style={metaLabel}>Confidence Band</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: S.xs }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: S.xs }}>
             <span style={{ fontSize: 14, color: C.text }}>±{formatBps(snapshot.confidenceBps)}</span>
             <Pill
               text={prettyEnum(snapshot.confidence)}
@@ -293,7 +293,7 @@ function PostResolution({
         <div style={sectionStyle}>
           <div style={metaLabel}>Sources Used</div>
           <div style={{ fontSize: 12, color: C.text }}>
-            {resolution.sourcesUsed.length > 0 ? resolution.sourcesUsed.join(', ') : '--'}
+            {resolution.sourcesUsed.length > 0 ? resolution.sourcesUsed.map(formatVenueName).join(', ') : '--'}
           </div>
         </div>
         <div style={sectionStyle}>
@@ -302,7 +302,7 @@ function PostResolution({
             <div style={{ display: 'flex', flexDirection: 'column', gap: S.xs }}>
               {resolution.sourcesExcluded.map((s) => (
                 <div key={s.venue} style={excludedSourceStyle}>
-                  <strong>{s.venue}</strong>
+                  <strong>{formatVenueName(s.venue)}</strong>
                   <Pill text={prettyEnum(s.reason)} color={s.reason === 'OUTLIER' ? C.bad : C.warn} small />
                   {s.deviationBps != null && <span>{formatBps(s.deviationBps)}</span>}
                 </div>
@@ -461,7 +461,7 @@ function VenueRow({ venue }: { venue: VenueHealth }) {
   const stateColor = venue.healthy ? C.ok : C.bad;
   return (
     <div style={venueRowStyle}>
-      <span style={{ color: C.text, fontWeight: 700 }}>{venue.venue}</span>
+      <span style={{ color: C.text, fontWeight: 700 }}>{formatVenueName(venue.venue)}</span>
       <span style={{ color: C.textDim, fontSize: 11 }}>{venue.quote}</span>
       <span style={{ color: venue.healthy ? C.text : C.warn, fontVariantNumeric: 'tabular-nums' }}>
         {venue.midCents != null ? formatUsdCents(venue.midCents) : '--'}
@@ -498,7 +498,7 @@ function VenueTwapRows({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       {venues.map((v) => (
         <div key={v.venue} style={venueTwapRowStyle}>
-          <span style={{ color: C.text, fontWeight: 700 }}>{v.venue}</span>
+          <span style={{ color: C.text, fontWeight: 700 }}>{formatVenueName(v.venue)}</span>
           <span style={{ color: C.text, fontWeight: 700 }}>
             {v.twapCents != null ? formatUsdCents(v.twapCents) : '--'}
           </span>
@@ -538,6 +538,8 @@ function Pill({ text, color, small }: { text: string; color: string; small?: boo
     <span
       style={{
         display: 'inline-block',
+        width: 'fit-content',
+        justifySelf: 'start',
         padding: small ? '1px 6px' : '3px 9px',
         borderRadius: 0,
         fontSize: small ? 10 : 11,
@@ -561,7 +563,7 @@ function formatWindowCountdown(msRemaining: number): string {
   if (msRemaining > 0) {
     return `closes in ${formatDuration(msRemaining)}`;
   }
-  return 'closed';
+  return 'Closed';
 }
 
 function formatDuration(ms: number): string {
@@ -588,6 +590,24 @@ function prettyEnum(s: string): string {
     .join(' ');
 }
 
+function formatVenueName(venue: string): string {
+  const known: Record<string, string> = {
+    binance: 'Binance',
+    bitstamp: 'Bitstamp',
+    coinbase: 'Coinbase',
+    gemini: 'Gemini',
+    itbit: 'itBit',
+    kraken: 'Kraken',
+    lmax: 'LMAX',
+    okx: 'OKX',
+  };
+  const normalized = venue.trim().toLowerCase();
+  return known[normalized] ?? venue
+    .split(/([\s-]+)/)
+    .map((part) => (/^[\s-]+$/.test(part) ? part : part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()))
+    .join('');
+}
+
 const metaLabel: CSSProperties = {
   fontSize: 11,
   color: C.textMute,
@@ -609,6 +629,14 @@ const metricGridStyle: CSSProperties = {
   gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
   gap: S.lg,
   marginBottom: S.md,
+};
+
+const metricCenterStyle: CSSProperties = {
+  textAlign: 'center',
+};
+
+const metricRightStyle: CSSProperties = {
+  textAlign: 'right',
 };
 
 const twoSectionGridStyle: CSSProperties = {

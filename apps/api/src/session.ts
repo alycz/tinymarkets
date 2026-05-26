@@ -104,7 +104,12 @@ export class MarketSession {
     };
 
     this.clob = new Clob(marketId);
-    this.marketCore = new MarketCore(this.config);
+    this.marketCore = new MarketCore(this.config, {
+      startingBalanceCentsForUser: (userId) =>
+        userId === MARKET.marketMakerUserId
+          ? usdCents(MARKET.marketMakerStartingBalanceCents)
+          : usdCents(MARKET.startingBalanceCents),
+    });
     this.status = 'open';
     this.expiryMs = expiry;
     this.openedAtMs = now;
@@ -601,6 +606,7 @@ export class MarketSession {
 
     const state = this.buildMarketState();
     this.broadcaster?.marketStatus(state);
+    this.broadcaster?.marketSnapshot(state, this.buildMarketSnapshotParts());
     this.broadcaster?.marketResolved(state, resolution);
 
     for (const [userId, pnlCents] of realizedPnlCents) {

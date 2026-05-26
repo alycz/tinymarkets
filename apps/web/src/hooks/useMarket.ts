@@ -3,16 +3,19 @@ import type {
   ClientMessage,
   ServerEvent,
   MarketStatus,
+  MarketResponse,
   IndicativeSnapshot,
   VenueWeightedTwapResolution,
   TimestampMs,
   Shares,
+  Result,
 } from '@jet/shared';
 import { marketChannel, oracleChannel } from '@jet/shared';
 import type { WsStatus } from './useWebSocket.js';
 
 export function useMarket(
   marketId: string | null,
+  apiUrl: string,
   send: (msg: ClientMessage) => void,
   lastEvent: ServerEvent | null,
   wsStatus: WsStatus,
@@ -32,6 +35,27 @@ export function useMarket(
   const [openInterest, setOpenInterest] = useState<Shares | null>(null);
   const [oracleSnapshot, setOracleSnapshot] = useState<IndicativeSnapshot | null>(null);
   const [resolution, setResolution] = useState<VenueWeightedTwapResolution | null>(null);
+
+  const applyMarket = (market: MarketResponse['market'], nextServerTs?: TimestampMs): void => {
+    setMarketStatus(market.status);
+    setMsRemaining(market.msRemaining);
+    if (nextServerTs !== undefined) setServerTs(nextServerTs);
+    setExpiryMs(market.expiryMs);
+    setOpenInterest(market.openInterest);
+    if (market.resolution) setResolution(market.resolution);
+  };
+
+  const refreshResolvedMarket = async (id: string): Promise<void> => {
+    try {
+      const res = await fetch(`${apiUrl}/markets/current`);
+      if (!res.ok) return;
+      const data = (await res.json()) as Result<MarketResponse>;
+      if (!data.ok || data.market.config.marketId !== id) return;
+      applyMarket(data.market);
+    } catch {
+      // The direct resolution event remains the primary path; this is only a fallback.
+    }
+  };
 
   // Reset state when marketId changes
   useEffect(() => {
@@ -60,11 +84,7 @@ export function useMarket(
     switch (lastEvent.type) {
       case 'market_snapshot':
         if (lastEvent.market.config.marketId === marketId) {
-          setMarketStatus(lastEvent.market.status);
-          setMsRemaining(lastEvent.market.msRemaining);
-          setServerTs(lastEvent.serverTs);
-          setExpiryMs(lastEvent.market.expiryMs);
-          setOpenInterest(lastEvent.market.openInterest);
+          applyMarket(lastEvent.market, lastEvent.serverTs);
           setResolution(lastEvent.market.resolution ?? null);
           setOracleSnapshot(lastEvent.oracle);
         }
@@ -75,6 +95,9 @@ export function useMarket(
           setMsRemaining(lastEvent.msRemaining);
           setServerTs(lastEvent.serverTs);
           setExpiryMs(lastEvent.expiryMs);
+          if (lastEvent.status === 'resolved' && resolution === null) {
+            void refreshResolvedMarket(marketId);
+          }
         }
         break;
       case 'countdown':
@@ -92,10 +115,12 @@ export function useMarket(
       case 'resolution':
         if (lastEvent.marketId === marketId) {
           setResolution(lastEvent.resolution);
+          setMarketStatus('resolved');
+          setMsRemaining(0);
         }
         break;
     }
-  }, [lastEvent, marketId]);
+  }, [lastEvent, marketId, resolution]);
 
   return { marketStatus, msRemaining, serverTs, expiryMs, openInterest, oracleSnapshot, resolution };
 }

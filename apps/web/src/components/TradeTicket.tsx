@@ -411,11 +411,11 @@ export default function TradeTicket({
         </button>
 
         {marketStatus !== 'open' && (
-          <div style={{ ...T.bodyDim, fontSize: 11, marginTop: S.sm, color: C.warn }}>
+          <div style={{ ...T.bodyDim, fontSize: 11, marginTop: S.sm, color: C.warn, textAlign: 'center' }}>
             {marketStatus === 'resolving'
               ? 'Resolving from oracle TWAP — trading disabled.'
               : marketStatus === 'resolved'
-              ? 'Market resolved — trading disabled.'
+              ? 'Market Resolved — Trading Disabled'
               : `Market ${marketStatus} — trading disabled.`}
           </div>
         )}

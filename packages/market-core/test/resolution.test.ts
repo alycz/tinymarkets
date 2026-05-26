@@ -49,6 +49,34 @@ function setupMarket() {
 }
 
 describe('resolution', () => {
+  it('keeps default balances while allowing per-user starting balance overrides', () => {
+    const core = new MarketCore(cfg, {
+      startingBalanceCents: usdCents(100_000),
+      startingBalanceCentsForUser: (userId) =>
+        userId === 'market-maker-1' ? usdCents(100_000_000) : usdCents(100_000),
+    });
+
+    expect(core.getBalance('demo-user').availableBalanceCents).toBe(100_000);
+    expect(core.getBalance('taker-001').availableBalanceCents).toBe(100_000);
+    expect(core.getBalance('market-maker-1').availableBalanceCents).toBe(100_000_000);
+  });
+
+  it('uses each user starting balance as the resolution PnL baseline', () => {
+    const core = new MarketCore(cfg, {
+      startingBalanceCents: usdCents(100_000),
+      startingBalanceCentsForUser: (userId) =>
+        userId === 'market-maker-1' ? usdCents(100_000_000) : usdCents(100_000),
+    });
+    const now = timestampMs(0);
+
+    core.applyMatch(m('market-maker-1', 'BUY', 'taker-001', 50, 2), now);
+    const { realizedPnlCents } = core.resolve('YES', timestampMs(999_999));
+
+    expect(realizedPnlCents.get('market-maker-1')).toBe(100);
+    expect(realizedPnlCents.get('taker-001')).toBe(-100);
+    expect([...realizedPnlCents.values()].reduce((sum, pnl) => sum + pnl, 0)).toBe(0);
+  });
+
   it('YES wins: YES holders get PAYOUT_CENTS per contract, NO holders get nothing', () => {
     const { core, START } = setupMarket();
     const now = timestampMs(999_999);

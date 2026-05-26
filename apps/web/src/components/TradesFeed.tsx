@@ -38,11 +38,12 @@ export function TradesFeedBody({ trades }: Props) {
 
 function Header() {
   return (
-    <div style={{ ...row, ...T.eyebrow, color: C.textMute, padding: `0 ${S.sm}px`, marginBottom: S.xs }}>
-      <span>Time</span>
-      <span>Side</span>
-      <span>Price</span>
-      <span style={{ textAlign: 'right' }}>Size</span>
+    <div style={{ ...tradeGridStyle, ...T.eyebrow, color: C.textMute, padding: `0 ${S.sm}px`, marginBottom: S.xs }}>
+      <span />
+      <span style={colAlign.time}>Time</span>
+      <span style={colAlign.side}>Side</span>
+      <span style={colAlign.price}>Price</span>
+      <span style={colAlign.size}>Size</span>
     </div>
   );
 }
@@ -66,24 +67,19 @@ function TradeRow({ activity }: { activity: ActivityRow }) {
       : ((100 - trade.yesPriceCents) as typeof trade.yesPriceCents);
 
   return (
-    <div style={tradeRowStyle}>
+    <div style={{ ...tradeGridStyle, ...tradeRowStyle }}>
       <span
         style={{
-          position: 'absolute',
-          left: 0,
-          top: 3,
-          bottom: 3,
           width: 2,
+          height: 16,
           background: sideColor,
           borderRadius: 0,
         }}
       />
-      <div style={{ ...row, paddingLeft: S.sm + 4, paddingRight: S.sm }}>
-        <span style={{ color: C.textMute }}>{age}</span>
-        <span style={{ color: sideColor, fontWeight: 600 }}>{trade.takerSide === 'YES' ? 'Above' : 'Below'}</span>
-        <span style={{ color: C.text }}>{formatPriceCents(displayPrice)}</span>
-        <span style={{ color: C.text, textAlign: 'right' }}>{trade.size as number}</span>
-      </div>
+      <span style={{ ...colAlign.time, color: C.textMute }}>{age}</span>
+      <span style={{ ...colAlign.side, color: sideColor, fontWeight: 600 }}>{trade.takerSide === 'YES' ? 'Above' : 'Below'}</span>
+      <span style={{ ...colAlign.price, color: C.text }}>{formatPriceCents(displayPrice)}</span>
+      <span style={{ ...colAlign.size, color: C.text }}>{trade.size as number}</span>
     </div>
   );
 }
@@ -120,19 +116,24 @@ function displayPrice(side: 'YES' | 'NO', yesPriceCents: number): number {
   return side === 'YES' ? yesPriceCents : 100 - yesPriceCents;
 }
 
-const row = {
+const tradeGridStyle: CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: '1.1fr 0.8fr 1fr 0.8fr',
+  gridTemplateColumns: '4px 72px 1fr 1fr 48px',
   gap: S.xs,
   fontFamily: mono,
   fontVariantNumeric: 'tabular-nums',
   fontSize: 11.5,
   alignItems: 'center',
-} as const;
+};
+
+const colAlign = {
+  time: { textAlign: 'left' } as CSSProperties,
+  side: { textAlign: 'center' } as CSSProperties,
+  price: { textAlign: 'center' } as CSSProperties,
+  size: { textAlign: 'right' } as CSSProperties,
+};
 
 const tradeRowStyle: CSSProperties = {
-  position: 'relative',
   height: 22,
-  display: 'flex',
-  alignItems: 'center',
+  padding: `0 ${S.sm}px`,
 };

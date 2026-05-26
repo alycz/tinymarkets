@@ -327,6 +327,7 @@ describe('WebSocket protocol hardening', () => {
       ]);
 
       expect(ws.sent.some((event) => event.type === 'resolution')).toBe(true);
+      expect(ws.sent.some((event) => event.type === 'market_snapshot' && event.market.resolution)).toBe(true);
       expect(ws.sent.some((event) => event.type === 'pnl_update')).toBe(true);
     } finally {
       manager.destroy();
