@@ -6,6 +6,7 @@ import type {
   IndicativeSnapshot,
   VenueWeightedTwapResolution,
   TimestampMs,
+  Shares,
 } from '@jet/shared';
 import { marketChannel, oracleChannel } from '@jet/shared';
 import type { WsStatus } from './useWebSocket.js';
@@ -20,6 +21,7 @@ export function useMarket(
   msRemaining: number;
   serverTs: TimestampMs | null;
   expiryMs: TimestampMs | null;
+  openInterest: Shares | null;
   oracleSnapshot: IndicativeSnapshot | null;
   resolution: VenueWeightedTwapResolution | null;
 } {
@@ -27,6 +29,7 @@ export function useMarket(
   const [msRemaining, setMsRemaining] = useState(0);
   const [serverTs, setServerTs] = useState<TimestampMs | null>(null);
   const [expiryMs, setExpiryMs] = useState<TimestampMs | null>(null);
+  const [openInterest, setOpenInterest] = useState<Shares | null>(null);
   const [oracleSnapshot, setOracleSnapshot] = useState<IndicativeSnapshot | null>(null);
   const [resolution, setResolution] = useState<VenueWeightedTwapResolution | null>(null);
 
@@ -36,6 +39,7 @@ export function useMarket(
     setMsRemaining(0);
     setServerTs(null);
     setExpiryMs(null);
+    setOpenInterest(null);
     setOracleSnapshot(null);
     setResolution(null);
   }, [marketId]);
@@ -60,6 +64,7 @@ export function useMarket(
           setMsRemaining(lastEvent.market.msRemaining);
           setServerTs(lastEvent.serverTs);
           setExpiryMs(lastEvent.market.expiryMs);
+          setOpenInterest(lastEvent.market.openInterest);
           setResolution(lastEvent.market.resolution ?? null);
           setOracleSnapshot(lastEvent.oracle);
         }
@@ -92,5 +97,5 @@ export function useMarket(
     }
   }, [lastEvent, marketId]);
 
-  return { marketStatus, msRemaining, serverTs, expiryMs, oracleSnapshot, resolution };
+  return { marketStatus, msRemaining, serverTs, expiryMs, openInterest, oracleSnapshot, resolution };
 }

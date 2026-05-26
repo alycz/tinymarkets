@@ -1,26 +1,41 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { C, S, panel } from '../theme.js';
+import { C, S, T } from '../theme.js';
 
 interface Props {
   title: string;
   children?: ReactNode;
   style?: CSSProperties;
+  bodyPad?: boolean;
+  right?: ReactNode;
 }
 
-const titleStyle: CSSProperties = {
-  fontSize: 10,
-  color: C.textMute,
-  letterSpacing: '0.12em',
-  fontWeight: 700,
-  textTransform: 'uppercase',
-  marginBottom: S.sm,
+const containerStyle: CSSProperties = {
+  background: C.panel,
+  border: `1px solid ${C.border}`,
+  borderRadius: 0,
+  boxSizing: 'border-box',
+  overflow: 'hidden',
 };
 
-export default function Panel({ title, children, style }: Props) {
+const headerStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  padding: `${S.sm}px ${S.md}px`,
+  borderBottom: `1px solid ${C.border}`,
+  background: C.panelSoft,
+  minHeight: 36,
+  gap: S.md,
+};
+
+export default function Panel({ title, children, style, bodyPad = true, right }: Props) {
   return (
-    <div style={{ ...panel, ...style }}>
-      <div style={titleStyle}>{title}</div>
-      {children}
+    <div style={{ ...containerStyle, ...style }}>
+      <div style={headerStyle}>
+        <span style={T.h3}>{title}</span>
+        {right}
+      </div>
+      <div style={bodyPad ? { padding: S.md } : undefined}>{children}</div>
     </div>
   );
 }

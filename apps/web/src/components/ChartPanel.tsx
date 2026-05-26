@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { createChart, LineSeries, LineStyle } from 'lightweight-charts';
+import { createChart, AreaSeries, LineStyle } from 'lightweight-charts';
 import type { UTCTimestamp } from 'lightweight-charts';
 import type { PriceCents, SharePricePoint } from '@jet/shared';
-import { C, S, panel } from '../theme.js';
+import { C, S, T, mono, panelHeader } from '../theme.js';
 import { formatPriceCents } from '../format.js';
 
 interface Props {
@@ -12,9 +12,10 @@ interface Props {
   bestBid: PriceCents | null;
   bestAsk: PriceCents | null;
   spread: PriceCents | null;
+  height?: number;
 }
 
-export default function ChartPanel({ sharePriceHistory, currentPoint, bestBid, bestAsk, spread }: Props) {
+export default function ChartPanel({ sharePriceHistory, currentPoint, bestBid, bestAsk, spread, height = 260 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const chartRef = useRef<any>(null);
@@ -31,34 +32,50 @@ export default function ChartPanel({ sharePriceHistory, currentPoint, bestBid, b
     if (!containerRef.current) return;
     const el = containerRef.current;
     const chart = createChart(el, {
-      layout: { background: { color: C.panel }, textColor: C.textDim },
-      grid: { vertLines: { color: C.border }, horzLines: { color: C.border } },
-      rightPriceScale: {
-        borderColor: C.border,
-        minimumWidth: 54,
+      layout: { background: { color: C.panel }, textColor: C.textMute, fontFamily: mono, fontSize: 11 },
+      grid: {
+        vertLines: { color: 'rgba(255,255,255,0.03)' },
+        horzLines: { color: 'rgba(255,255,255,0.04)' },
       },
-      timeScale: { borderColor: C.border, timeVisible: true, secondsVisible: true },
-      crosshair: { mode: 1 },
+      rightPriceScale: {
+        borderColor: 'transparent',
+        minimumWidth: 56,
+      },
+      timeScale: { borderColor: 'transparent', timeVisible: true, secondsVisible: true },
+      crosshair: {
+        mode: 1,
+        vertLine: { color: C.borderSoft, width: 1, style: LineStyle.Dotted, labelBackgroundColor: C.elevated },
+        horzLine: { color: C.borderSoft, width: 1, style: LineStyle.Dotted, labelBackgroundColor: C.elevated },
+      },
       width: el.clientWidth,
-      height: 260,
+      height,
     });
-    chart.priceScale('right').applyOptions({ autoScale: false, scaleMargins: { top: 0.12, bottom: 0.12 } });
+    chart.priceScale('right').applyOptions({ autoScale: true, scaleMargins: { top: 0.1, bottom: 0.1 } });
     chartRef.current = chart;
-    const series = chart.addSeries(LineSeries, {
-      color: C.yes,
+    const series = chart.addSeries(AreaSeries, {
+      lineColor: C.yes,
+      topColor: 'rgba(26,166,74,0.28)',
+      bottomColor: 'rgba(26,166,74,0)',
       lineWidth: 2,
       priceFormat: { type: 'price', precision: 0, minMove: 1 },
-      autoscaleInfoProvider: () => ({
-        priceRange: {
-          minValue: 0,
-          maxValue: 100,
-        },
-      }),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      autoscaleInfoProvider: (original: any) => {
+        const res = original();
+        if (!res || !res.priceRange) return res;
+        const buffer = 2;
+        const min = Math.max(0, res.priceRange.minValue - buffer);
+        const max = Math.min(100, res.priceRange.maxValue + buffer);
+        if (max - min < 4) {
+          const mid = (min + max) / 2;
+          return { priceRange: { minValue: Math.max(0, mid - 2), maxValue: Math.min(100, mid + 2) } };
+        }
+        return { priceRange: { minValue: min, maxValue: max } };
+      },
     });
     seriesRef.current = series;
     fiftyLineRef.current = series.createPriceLine({
       price: 50,
-      color: C.textMute,
+      color: C.borderSoft,
       lineWidth: 1,
       lineStyle: LineStyle.Dashed,
       axisLabelVisible: true,
@@ -82,7 +99,7 @@ export default function ChartPanel({ sharePriceHistory, currentPoint, bestBid, b
     });
 
     const ro = new ResizeObserver(() => {
-      chart.applyOptions({ width: el.clientWidth });
+      chart.applyOptions({ width: el.clientWidth, height });
     });
     ro.observe(el);
 
@@ -95,7 +112,7 @@ export default function ChartPanel({ sharePriceHistory, currentPoint, bestBid, b
       bidLineRef.current = null;
       askLineRef.current = null;
     };
-  }, []);
+  }, [height]);
 
   useEffect(() => {
     const series = seriesRef.current;
@@ -131,35 +148,48 @@ export default function ChartPanel({ sharePriceHistory, currentPoint, bestBid, b
   }, [bestBid, bestAsk]);
 
   const yes = currentPoint?.yesPriceCents ?? null;
-  const no = currentPoint?.noPriceCents ?? null;
-  const source = currentPoint?.source ?? 'mark';
-  const lastTrade = [...sharePriceHistory].reverse().find((point) => point.source === 'trade') ?? null;
-
+  const yesDeltaCents = yes != null ? yes - 50 : null;
+  const yesDeltaPct = yes != null ? ((yes - 50) / 50) * 100 : null;
+  const yesDeltaColor =
+    yesDeltaCents == null ? C.textDim : yesDeltaCents > 0 ? C.yes : yesDeltaCents < 0 ? C.no : C.textDim;
   return (
-    <div style={{ ...panel, padding: 0, overflow: 'hidden' }}>
-      <div style={headerStyle}>
-        <div style={{ minWidth: 0 }}>
-          <div style={labelStyle}>YES PRICE / IMPLIED PROBABILITY</div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: S.sm, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 32, lineHeight: 1, fontWeight: 900, color: C.yes }}>
-              {yes != null ? formatPriceCents(yes) : '--'}
-            </span>
-            <span style={{ fontSize: 13, color: C.textDim }}>
-              NO {no != null ? formatPriceCents(no) : '--'}
-            </span>
-            <span style={{ fontSize: 13, color: C.textDim }}>
-              Last trade {lastTrade ? formatPriceCents(lastTrade.yesPriceCents) : '--'}
-            </span>
-            <span style={{ fontSize: 11, color: C.textMute, textTransform: 'uppercase' }}>{source}</span>
+    <div style={containerStyle}>
+      <div style={{ ...panelHeader, background: C.panel, borderBottom: `1px solid ${C.border}`, height: 64 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: S.md, minWidth: 0 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <div style={T.h3}>BTC-2M Above</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: S.sm, flexWrap: 'wrap' }}>
+              <span style={{ ...T.numLg, color: C.text, lineHeight: 1 }}>
+                {yes != null ? formatPriceCents(yes) : '--'}
+              </span>
+              {yes != null && yesDeltaCents != null && yesDeltaPct != null && (
+                <span
+                  style={{
+                    fontSize: 13,
+                    color: yesDeltaColor,
+                    fontFamily: mono,
+                    fontVariantNumeric: 'tabular-nums',
+                    fontWeight: 700,
+                  }}
+                >
+                  {yesDeltaCents >= 0 ? '+' : ''}
+                  {yesDeltaCents}¢ / {yesDeltaPct >= 0 ? '+' : ''}
+                  {yesDeltaPct.toFixed(2)}%
+                </span>
+              )}
+            </div>
           </div>
         </div>
-        <div style={quoteBoxStyle}>
-          <Quote label="Bid" value={bestBid} color={C.yes} />
-          <Quote label="Ask" value={bestAsk} color={C.no} />
-          <Quote label="Spread" value={spread} color={C.textDim} />
+        <div style={chipRowStyle}>
+          <QuoteStat label="Bid" value={bestBid} color={C.yes} />
+          <QuoteStat label="Ask" value={bestAsk} color={C.no} />
+          <QuoteStat label="Spread" value={spread} color={C.textDim} />
         </div>
       </div>
-      <div ref={containerRef} />
+      <div style={chartWrapStyle}>
+        <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+        {sharePriceHistory.length === 0 && <div style={emptyOverlayStyle}>Waiting for prediction prints</div>}
+      </div>
     </div>
   );
 }
@@ -170,37 +200,68 @@ function sourcePriority(source: SharePricePoint['source']): number {
   return 1;
 }
 
-function Quote({ label, value, color }: { label: string; value: PriceCents | null; color: string }) {
+function QuoteStat({ label, value, color }: { label: string; value: PriceCents | null; color: string }) {
   return (
-    <div style={{ textAlign: 'right' }}>
-      <div style={{ color: C.textMute, fontSize: 10, fontWeight: 800 }}>{label}</div>
-      <div style={{ color, fontSize: 15, fontWeight: 800 }}>
+    <div style={quoteStatStyle}>
+      <div style={{ ...T.eyebrow, fontSize: 10 }}>{label}</div>
+      <div
+        style={{
+          color,
+          fontSize: 16,
+          fontWeight: 700,
+          fontFamily: mono,
+          fontVariantNumeric: 'tabular-nums',
+          lineHeight: 1,
+        }}
+      >
         {value != null ? formatPriceCents(value) : '--'}
       </div>
     </div>
   );
 }
 
-const headerStyle: CSSProperties = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  gap: S.md,
-  padding: `${S.md}px ${S.md}px`,
+const containerStyle: CSSProperties = {
+  background: C.panel,
+  borderRight: `1px solid ${C.border}`,
   borderBottom: `1px solid ${C.border}`,
-};
-
-const labelStyle: CSSProperties = {
-  fontSize: 10,
-  color: C.textMute,
-  letterSpacing: '0.1em',
-  fontWeight: 800,
-  textTransform: 'uppercase',
-  marginBottom: S.xs,
-};
-
-const quoteBoxStyle: CSSProperties = {
+  overflow: 'hidden',
+  minWidth: 0,
+  height: '100%',
   display: 'flex',
-  gap: S.lg,
+  flexDirection: 'column',
+};
+
+const chipRowStyle: CSSProperties = {
+  display: 'flex',
+  gap: S.md,
   flexShrink: 0,
+  justifyContent: 'flex-end',
+  alignItems: 'center',
+};
+
+const quoteStatStyle: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'flex-end',
+  textAlign: 'right',
+  minWidth: 56,
+  gap: 4,
+};
+
+const chartWrapStyle: CSSProperties = {
+  position: 'relative',
+  background: C.panel,
+  minHeight: 0,
+  flex: 1,
+};
+
+const emptyOverlayStyle: CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  color: C.textMute,
+  fontSize: 12,
+  pointerEvents: 'none',
 };

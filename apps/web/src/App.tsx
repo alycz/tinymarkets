@@ -10,14 +10,14 @@ import { usePriceHistory } from './hooks/usePriceHistory.js';
 import { useSharePriceHistory } from './hooks/useSharePriceHistory.js';
 import MarketPage from './components/MarketPage.js';
 import { API_URL, WS_URL, DEMO_USER_ID } from './env.js';
-import { C, S } from './theme.js';
+import { C, S, T, sans } from './theme.js';
 
 export default function App() {
   const [marketId, setMarketId] = useState<string | null>(null);
   const [config, setConfig] = useState<MarketConfig | null>(null);
 
   const { send, lastEvent, status } = useWebSocket(WS_URL);
-  const { marketStatus, msRemaining, serverTs, oracleSnapshot, resolution } = useMarket(
+  const { marketStatus, msRemaining, serverTs, openInterest, oracleSnapshot, resolution } = useMarket(
     marketId,
     send,
     lastEvent,
@@ -59,10 +59,16 @@ export default function App() {
   }, []);
 
   return (
-    <div style={{ background: C.bg, minHeight: '100vh' }}>
+    <div style={{ background: C.bg, minHeight: '100vh', fontFamily: sans, color: C.text }}>
       <header style={headerStyle}>
-        <span style={{ color: C.accent, fontWeight: 700 }}>JET</span>
-        <span style={{ color: C.textMute, marginLeft: S.sm }}>PREDICTION MARKET</span>
+        <div style={brandRowStyle}>
+          <img src="/tiny-logo.png" alt="TINY" style={logoStyle} />
+          <nav style={navStyle}>
+            <a href="#" style={navItemActiveStyle}>
+              Trade
+            </a>
+          </nav>
+        </div>
       </header>
 
       {marketId && config && marketStatus ? (
@@ -72,6 +78,7 @@ export default function App() {
           msRemaining={msRemaining}
           serverTs={serverTs}
           wsStatus={status}
+          openInterest={openInterest}
           oracleSnapshot={oracleSnapshot}
           resolution={resolution}
           orderBookSnapshot={orderBookSnapshot}
@@ -91,10 +98,18 @@ export default function App() {
         />
       ) : (
         <div style={emptyStyle}>
-          <p style={{ color: C.textMute, marginBottom: S.lg }}>No active market.</p>
-          <button onClick={() => void startDemo()} style={primaryBtn}>
-            Start Demo Market
-          </button>
+          <div style={launchPanelStyle}>
+            <div style={launchEyebrowStyle}>BTC Binary Terminal</div>
+            <div style={launchTitleStyle}>No Active Market</div>
+            <p style={launchCopyStyle}>
+              Start A Short-Duration BTC/USD Market
+              <br />
+              To Open The Live Trading Workspace.
+            </p>
+            <button onClick={() => void startDemo()} style={primaryBtn}>
+              Start Demo Market
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -104,27 +119,91 @@ export default function App() {
 const headerStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
-  padding: `${S.sm}px ${S.lg}px`,
+  justifyContent: 'space-between',
+  padding: `0 ${S.lg}px`,
   borderBottom: `1px solid ${C.border}`,
-  fontSize: '0.8rem',
-  letterSpacing: '0.1em',
+  background: C.bg,
+  height: 48,
+};
+
+const brandRowStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: S.xl,
+  height: '100%',
+};
+
+const logoStyle: CSSProperties = {
+  height: 22,
+  display: 'block',
+};
+
+const navStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'stretch',
+  gap: 0,
+  height: '100%',
+};
+
+const navItemActiveStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  padding: `0 ${S.sm}px`,
+  color: '#ffffff',
+  fontSize: 13,
+  fontWeight: 700,
+  textDecoration: 'none',
+  borderBottom: `2px solid ${C.accent}`,
+  marginBottom: -1,
+  letterSpacing: '0.02em',
 };
 
 const emptyStyle: CSSProperties = {
-  padding: '4rem 2rem',
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
+  justifyContent: 'center',
+  minHeight: 'calc(100vh - 48px)',
+  padding: `${S.xl}px ${S.lg}px`,
+};
+
+const launchPanelStyle: CSSProperties = {
+  width: 'min(440px, 100%)',
+  background: C.panel,
+  border: `1px solid ${C.border}`,
+  borderRadius: 0,
+  padding: S.xl,
+  textAlign: 'center',
+  boxShadow: '0 24px 48px rgba(0,0,0,0.6)',
+};
+
+const launchEyebrowStyle: CSSProperties = {
+  ...T.eyebrow,
+  color: C.accent,
+};
+
+const launchTitleStyle: CSSProperties = {
+  ...T.h1,
+  fontSize: 24,
+  marginTop: S.sm,
+};
+
+const launchCopyStyle: CSSProperties = {
+  color: C.textDim,
+  fontSize: 13,
+  lineHeight: 1.5,
+  margin: `${S.sm}px 0 ${S.lg}px`,
 };
 
 const primaryBtn: CSSProperties = {
   background: C.accent,
-  color: '#fff',
+  color: '#ffffff',
   border: 'none',
-  borderRadius: 6,
-  padding: '0.75rem 1.75rem',
+  borderRadius: 0,
+  padding: '0.75rem 1.6rem',
   cursor: 'pointer',
-  fontSize: '0.95rem',
+  fontSize: 14,
   fontFamily: 'inherit',
-  fontWeight: 600,
+  fontWeight: 700,
+  letterSpacing: '0.02em',
 };

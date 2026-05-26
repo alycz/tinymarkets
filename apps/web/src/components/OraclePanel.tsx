@@ -28,6 +28,9 @@ interface Props {
 }
 
 const FINAL_WINDOW_MS = 15_000;
+const ORACLE_METHOD_LABEL = 'Venue-Weighted 15s TWAP';
+const PANEL_TITLE = `Oracle · ${ORACLE_METHOD_LABEL}`;
+const PANEL_TITLE_SETTLED = `${PANEL_TITLE} · Settled`;
 
 const DISPERSION_COLOR: Record<DispersionState, string> = {
   NORMAL: C.ok,
@@ -106,6 +109,7 @@ export default function OraclePanel({
     return (
       <PreResolution
         snapshot={oracleSnapshot}
+        marketStatus={marketStatus}
         msRemaining={msRemaining}
         serverTs={serverTs}
         demoControl={demoControl}
@@ -114,12 +118,12 @@ export default function OraclePanel({
     );
   }
   return (
-    <Panel title="Oracle · VENUE_WEIGHTED_TWAP_V1">
+    <Panel title={PANEL_TITLE}>
       <div style={topLineStyle}>
         {demoControl}
       </div>
       <div style={{ color: C.textMute, fontSize: 13, padding: `${S.sm}px 0` }}>
-        Waiting for oracle...
+        Waiting For Oracle...
       </div>
     </Panel>
   );
@@ -127,12 +131,14 @@ export default function OraclePanel({
 
 function PreResolution({
   snapshot,
+  marketStatus,
   msRemaining,
   serverTs,
   demoControl,
   attackCostEstimate,
 }: {
   snapshot: IndicativeSnapshot;
+  marketStatus: MarketStatus;
   msRemaining: number;
   serverTs: TimestampMs | null;
   demoControl: ReactNode;
@@ -143,14 +149,14 @@ function PreResolution({
   const inFinalWindow = msRemaining <= FINAL_WINDOW_MS;
 
   return (
-    <Panel title="Oracle · VENUE_WEIGHTED_TWAP_V1">
+    <Panel title={PANEL_TITLE}>
       <div style={topLineStyle}>
         <div>
-          <div style={metaLabel}>METHOD</div>
-          <Pill text="VENUE_WEIGHTED_TWAP_V1" color={C.accent} />
+          <div style={metaLabel}>Oracle Method</div>
+          <Pill text={ORACLE_METHOD_LABEL} color={C.accent} />
         </div>
         <div>
-          <div style={metaLabel}>FINAL WINDOW</div>
+          <div style={metaLabel}>Settlement Window</div>
           <div style={{ color: inFinalWindow ? C.warn : C.text, fontSize: 13, fontWeight: 700 }}>
             {formatWindowCountdown(msRemaining)}
           </div>
@@ -163,23 +169,23 @@ function PreResolution({
 
       <div style={metricGridStyle}>
         <Metric
-          label="LIVE INDICATIVE"
+          label="Live Oracle Estimate"
           value={formatUsdCents(snapshot.btcPriceCents)}
-          note="not settlement"
+          note="Indicative Only — Final Result Uses 15s TWAP"
         />
         <div>
-          <div style={metaLabel}>DISPERSION</div>
+          <div style={metaLabel}>Venue Disagreement</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: S.xs }}>
             <span style={{ fontSize: 14, color: C.text }}>{formatBps(snapshot.dispersionBps)}</span>
-            <Pill text={snapshot.dispersionState} color={dispColor} />
+            <Pill text={prettyEnum(snapshot.dispersionState)} color={dispColor} />
           </div>
         </div>
         <div>
-          <div style={metaLabel}>OUTPUT BAND</div>
+          <div style={metaLabel}>Confidence Band</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: S.xs }}>
             <span style={{ fontSize: 14, color: C.text }}>±{formatBps(snapshot.confidenceBps)}</span>
             <Pill
-              text={snapshot.confidence}
+              text={prettyEnum(snapshot.confidence)}
               color={snapshot.confidence === 'HIGH' ? C.ok : snapshot.confidence === 'MEDIUM' ? C.warn : C.bad}
             />
           </div>
@@ -190,28 +196,31 @@ function PreResolution({
         <div style={sectionStyle}>
           <div style={sectionHeaderStyle}>
             <div>
-              <div style={metaLabel}>FORMING RESOLUTION</div>
+              <div style={metaLabel}>Current Final-Window TWAP</div>
               <div style={{ fontSize: 18, fontWeight: 800, color: C.text }}>
                 {formatUsdCents(forming.formingPriceCents)}
               </div>
             </div>
-            <Pill
-              text={`${Math.min(100, Math.round((forming.elapsedMs / forming.window.windowMs) * 100))}% window`}
-              color={forming.complete ? C.ok : C.warn}
+            <FormingWindowStatus
+              forming={forming}
+              marketStatus={marketStatus}
+              msRemaining={msRemaining}
             />
           </div>
+          <WeightHelper />
+          <VenueTwapHeader />
           <VenueTwapRows venues={forming.venues} />
         </div>
       )}
 
       <div style={sectionStyle}>
-        <div style={{ ...metaLabel, marginBottom: S.xs }}>VENUE HEALTH</div>
+        <div style={{ ...metaLabel, marginBottom: S.xs }}>Venue Health</div>
         <div style={venueHeaderStyle}>
-          <span>venue</span>
-          <span>quote</span>
-          <span>mid</span>
-          <span>spread</span>
-          <span>state</span>
+          <span>Venue</span>
+          <span>Pair</span>
+          <span>Latest Midpoint</span>
+          <span>Bid/Ask Spread</span>
+          <span>Feed Status</span>
         </div>
         {snapshot.venues.map((v) => (
           <VenueRow key={v.venue} venue={v} />
@@ -235,14 +244,14 @@ function PostResolution({
   const dispColor = DISPERSION_COLOR[resolution.dispersionState];
 
   return (
-    <Panel title="Oracle · VENUE_WEIGHTED_TWAP_V1 · Settled">
+    <Panel title={PANEL_TITLE_SETTLED}>
       <div style={topLineStyle}>
         <div>
-          <div style={metaLabel}>METHOD</div>
-          <Pill text={`${resolution.method} ${resolution.ruleVersion}`} color={C.accent} />
+          <div style={metaLabel}>Oracle Method</div>
+          <Pill text={`${ORACLE_METHOD_LABEL} · ${resolution.ruleVersion}`} color={C.accent} />
         </div>
         <div>
-          <div style={metaLabel}>REPLAYABLE HASH</div>
+          <div style={metaLabel}>Replayable Hash</div>
           <div style={hashStyle}>{resolution.inputHash}</div>
         </div>
         {demoControl}
@@ -250,31 +259,31 @@ function PostResolution({
 
       <div style={metricGridStyle}>
         <Metric
-          label="FINAL RESOLUTION PRICE"
+          label="Final Resolution Price"
           value={formatUsdCents(resolution.resolutionPriceCents)}
         />
         <div>
-          <div style={metaLabel}>OUTCOME</div>
+          <div style={metaLabel}>Outcome</div>
           <div style={{ fontSize: 20, fontWeight: 800, color: resolution.outcome === 'YES' ? C.yes : C.no }}>
-            {resolution.outcome}
+            {resolution.outcome === 'YES' ? 'Above' : 'Below'}
           </div>
         </div>
         <div>
-          <div style={metaLabel}>CONFIDENCE</div>
+          <div style={metaLabel}>Confidence Band</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: S.xs }}>
             <span style={{ fontSize: 14, color: C.text }}>±{formatBps(resolution.confidenceBps)}</span>
             <Pill
-              text={resolution.confidence}
+              text={prettyEnum(resolution.confidence)}
               color={resolution.confidence === 'HIGH' ? C.ok : resolution.confidence === 'MEDIUM' ? C.warn : C.bad}
             />
           </div>
         </div>
         <div>
-          <div style={metaLabel}>DISPERSION</div>
+          <div style={metaLabel}>Venue Disagreement</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: S.xs, flexWrap: 'wrap' }}>
-            <Pill text={resolution.dispersionState} color={dispColor} />
+            <Pill text={prettyEnum(resolution.dispersionState)} color={dispColor} />
             {resolution.qualityFlags.map(flag => (
-              <Pill key={flag} text={flag.replaceAll('_', ' ')} color={flag === 'NEAR_THRESHOLD' ? C.warn : C.bad} small />
+              <Pill key={flag} text={prettyEnum(flag)} color={flag === 'NEAR_THRESHOLD' ? C.warn : C.bad} small />
             ))}
           </div>
         </div>
@@ -282,19 +291,19 @@ function PostResolution({
 
       <div style={twoSectionGridStyle}>
         <div style={sectionStyle}>
-          <div style={metaLabel}>SOURCES USED</div>
+          <div style={metaLabel}>Sources Used</div>
           <div style={{ fontSize: 12, color: C.text }}>
             {resolution.sourcesUsed.length > 0 ? resolution.sourcesUsed.join(', ') : '--'}
           </div>
         </div>
         <div style={sectionStyle}>
-          <div style={metaLabel}>SOURCES EXCLUDED</div>
+          <div style={metaLabel}>Sources Excluded</div>
           {resolution.sourcesExcluded.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: S.xs }}>
               {resolution.sourcesExcluded.map((s) => (
                 <div key={s.venue} style={excludedSourceStyle}>
                   <strong>{s.venue}</strong>
-                  <Pill text={s.reason} color={s.reason === 'OUTLIER' ? C.bad : C.warn} small />
+                  <Pill text={prettyEnum(s.reason)} color={s.reason === 'OUTLIER' ? C.bad : C.warn} small />
                   {s.deviationBps != null && <span>{formatBps(s.deviationBps)}</span>}
                 </div>
               ))}
@@ -306,17 +315,58 @@ function PostResolution({
       </div>
 
       <div style={sectionStyle}>
-        <div style={{ ...metaLabel, marginBottom: S.xs }}>VENUE TWAPS AND WEIGHTS</div>
+        <div style={{ ...metaLabel, marginBottom: S.xs }}>Venue TWAPs And Weights</div>
+        <WeightHelper />
+        <VenueTwapHeader />
         <VenueTwapRows venues={resolution.venueTwaps} />
       </div>
 
       <div style={sectionStyle}>
-        <div style={metaLabel}>TIE RULE</div>
-        <div style={{ color: C.text, fontSize: 12 }}>{resolution.tieRule}</div>
+        <div style={metaLabel}>Exact Strike Rule</div>
+        <div style={{ color: C.text, fontSize: 12 }}>Exact Tie = Below Wins</div>
+        <div style={{ color: C.textMute, fontSize: 11, marginTop: S.xs, lineHeight: 1.4 }}>
+          Above Wins Only If The Final Oracle Price Is Higher Than The Strike.
+        </div>
       </div>
 
       {attackCostEstimate && <AttackCost estimate={attackCostEstimate} />}
     </Panel>
+  );
+}
+
+function FormingWindowStatus({
+  forming,
+  marketStatus,
+  msRemaining,
+}: {
+  forming: NonNullable<IndicativeSnapshot['formingResolution']>;
+  marketStatus: MarketStatus;
+  msRemaining: number;
+}) {
+  const pctRaw = Math.round((forming.elapsedMs / forming.window.windowMs) * 100);
+  const pct = Math.max(0, Math.min(100, pctRaw));
+  if (marketStatus === 'resolving' || msRemaining <= 0) {
+    return (
+      <span style={{ color: C.textDim, fontSize: 12, fontStyle: 'italic' }}>
+        Settlement Window Closed — Calculating Final Result
+      </span>
+    );
+  }
+  if (msRemaining > FINAL_WINDOW_MS) return null;
+  return (
+    <Pill
+      text={`${pct}% Of Settlement Window Collected`}
+      color={forming.complete ? C.ok : C.warn}
+    />
+  );
+}
+
+function WeightHelper() {
+  return (
+    <div style={{ color: C.textMute, fontSize: 11, marginBottom: S.xs, lineHeight: 1.4 }}>
+      Config Weight = The Static Weight Set Per Venue. Active Weight = The Same Weight Renormalized
+      After Unhealthy Or Outlier Venues Are Excluded.
+    </div>
   );
 }
 
@@ -331,7 +381,7 @@ function DemoControl({
 }) {
   const disabled = demo.status === 'arming' || marketStatus === 'resolved';
   return (
-    <div style={{ marginLeft: 'auto', minWidth: 250 }}>
+    <div style={{ marginLeft: 'auto', minWidth: 260 }}>
       <div style={{ display: 'flex', gap: S.xs, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         <DemoButton
           label={buttonLabel(demo, 'NEAR_EXPIRY_SPIKE')}
@@ -345,11 +395,19 @@ function DemoControl({
         />
       </div>
       <div style={demoCopyStyle}>
-        Injects a reproducible single-venue near-expiry manipulation into the simulated oracle feed.
+        <strong style={{ color: C.text }}>Spike:</strong> Injects A Large One-Venue Price Spike
+        Near Expiry. The Oracle Should Exclude It As An Outlier.
+      </div>
+      <div style={demoCopyStyle}>
+        <strong style={{ color: C.text }}>Subtle:</strong> Injects A Smaller One-Venue Dislocation
+        During The Final Window. The Oracle Should Lower Confidence Or Exclude It If Thresholds Are
+        Crossed.
       </div>
       {demo.status === 'armed' && (
         <div style={{ ...demoCopyStyle, color: C.warn, fontWeight: 700 }}>
-          {demo.scenario === 'NEAR_EXPIRY_SPIKE' ? 'Spike' : 'Subtle dislocation'} armed. At resolution, the manipulated venue should be excluded or confidence lowered.
+          {demo.scenario === 'NEAR_EXPIRY_SPIKE'
+            ? 'Spike Armed — Binance Will Spike Near Expiry.'
+            : 'Subtle Dislocation Armed — Binance Will Drift During The Final Window.'}
         </div>
       )}
       {demo.error && <div style={{ color: C.bad, fontSize: 11, marginTop: S.xs, textAlign: 'right' }}>{demo.error}</div>}
@@ -409,7 +467,24 @@ function VenueRow({ venue }: { venue: VenueHealth }) {
         {venue.midCents != null ? formatUsdCents(venue.midCents) : '--'}
       </span>
       <span style={{ color: C.textDim }}>{formatBps(venue.spreadBps)}</span>
-      <Pill text={venue.healthy ? 'HEALTHY' : venue.excludedReason ?? 'EXCLUDED'} color={stateColor} small />
+      <Pill
+        text={venue.healthy ? 'Feed Healthy' : prettyEnum(venue.excludedReason ?? 'Excluded')}
+        color={stateColor}
+        small
+      />
+    </div>
+  );
+}
+
+function VenueTwapHeader() {
+  return (
+    <div style={venueTwapHeaderStyle}>
+      <span>Venue</span>
+      <span>Final-Window TWAP</span>
+      <span>Config Weight</span>
+      <span>Active Weight</span>
+      <span>Status</span>
+      <span>Deviation</span>
     </div>
   );
 }
@@ -430,11 +505,13 @@ function VenueTwapRows({
           <span style={{ color: C.textDim }}>{formatWeight(v.weight)}</span>
           <span style={{ color: C.textDim }}>{v.normalizedWeight != null ? formatWeight(v.normalizedWeight) : '--'}</span>
           <Pill
-            text={v.included ? 'USED' : v.excludedReason ?? 'EXCLUDED'}
+            text={v.included ? 'Used In Settlement' : prettyEnum(v.excludedReason ?? 'Excluded')}
             color={v.included ? C.ok : v.excludedReason === 'OUTLIER' ? C.bad : C.warn}
             small
           />
-          {v.deviationBps != null && <span style={{ color: C.warn }}>{formatBps(v.deviationBps)}</span>}
+          <span style={{ color: v.deviationBps != null ? C.warn : C.textMute }}>
+            {v.deviationBps != null ? formatBps(v.deviationBps) : '--'}
+          </span>
         </div>
       ))}
     </div>
@@ -444,13 +521,13 @@ function VenueTwapRows({
 function AttackCost({ estimate }: { estimate: AttackCostEstimate }) {
   return (
     <div style={sectionStyle}>
-      <div style={metaLabel}>ATTACK COST</div>
+      <div style={metaLabel}>Attack Cost</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: S.lg, marginTop: S.xs }}>
-        <span style={costStyle}>single venue {formatUsdCents(estimate.singleVenueCents)}</span>
-        <span style={costStyle}>median basket {formatUsdCents(estimate.medianBasketCents)}</span>
+        <span style={costStyle}>Single Venue {formatUsdCents(estimate.singleVenueCents)}</span>
+        <span style={costStyle}>Median Basket {formatUsdCents(estimate.medianBasketCents)}</span>
       </div>
       <div style={{ color: C.textMute, fontSize: 11, marginTop: S.xs }}>
-        illustrative, from simulated depth
+        Illustrative, From Simulated Depth
       </div>
     </div>
   );
@@ -461,11 +538,11 @@ function Pill({ text, color, small }: { text: string; color: string; small?: boo
     <span
       style={{
         display: 'inline-block',
-        padding: small ? '1px 5px' : '2px 8px',
-        borderRadius: 4,
+        padding: small ? '1px 6px' : '3px 9px',
+        borderRadius: 0,
         fontSize: small ? 10 : 11,
-        fontWeight: 800,
-        letterSpacing: '0.06em',
+        fontWeight: 700,
+        letterSpacing: '0.04em',
         background: color + '22',
         color,
         border: `1px solid ${color}44`,
@@ -503,12 +580,19 @@ function formatWeight(weight: number): string {
   return `${Math.round(weight * 100)}%`;
 }
 
+function prettyEnum(s: string): string {
+  return s
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+    .join(' ');
+}
+
 const metaLabel: CSSProperties = {
-  fontSize: 10,
+  fontSize: 11,
   color: C.textMute,
-  letterSpacing: '0.1em',
-  fontWeight: 800,
-  textTransform: 'uppercase',
+  letterSpacing: '0.02em',
+  fontWeight: 700,
   marginBottom: 3,
 };
 
@@ -550,18 +634,18 @@ const sectionHeaderStyle: CSSProperties = {
 
 const venueHeaderStyle: CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: 'minmax(72px, 1fr) 44px minmax(110px, 1.2fr) 72px minmax(92px, auto)',
+  gridTemplateColumns: 'minmax(82px, 1fr) 56px minmax(120px, 1.2fr) minmax(96px, 1fr) minmax(120px, auto)',
   gap: S.sm,
   color: C.textMute,
-  fontSize: 10,
-  fontWeight: 800,
-  textTransform: 'uppercase',
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: '0.02em',
   paddingBottom: S.xs,
 };
 
 const venueRowStyle: CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: 'minmax(72px, 1fr) 44px minmax(110px, 1.2fr) 72px minmax(92px, auto)',
+  gridTemplateColumns: 'minmax(82px, 1fr) 56px minmax(120px, 1.2fr) minmax(96px, 1fr) minmax(120px, auto)',
   gap: S.sm,
   alignItems: 'center',
   fontSize: 12,
@@ -571,12 +655,22 @@ const venueRowStyle: CSSProperties = {
 
 const venueTwapRowStyle: CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: 'minmax(72px, 1fr) minmax(116px, 1.2fr) 56px 56px minmax(88px, auto) 56px',
+  gridTemplateColumns: 'minmax(72px, 0.9fr) minmax(120px, 1.2fr) minmax(80px, 0.8fr) minmax(80px, 0.8fr) minmax(140px, auto) minmax(64px, 0.7fr)',
   gap: S.sm,
   alignItems: 'center',
   fontSize: 12,
   padding: '4px 0',
   borderBottom: `1px solid ${C.border}44`,
+};
+
+const venueTwapHeaderStyle: CSSProperties = {
+  ...venueTwapRowStyle,
+  color: C.textMute,
+  fontSize: 10,
+  fontWeight: 700,
+  letterSpacing: '0.04em',
+  borderBottom: `1px solid ${C.border}`,
+  marginBottom: 2,
 };
 
 const excludedSourceStyle: CSSProperties = {
@@ -588,27 +682,28 @@ const excludedSourceStyle: CSSProperties = {
   fontSize: 12,
   background: C.bad + '12',
   border: `1px solid ${C.bad}33`,
-  borderRadius: 4,
-  padding: '5px 6px',
+  borderRadius: 0,
+  padding: '5px 8px',
 };
 
 const demoCopyStyle: CSSProperties = {
   color: C.textMute,
   fontSize: 11,
-  lineHeight: 1.35,
+  lineHeight: 1.4,
   marginTop: S.xs,
   textAlign: 'right',
 };
 
 const demoButtonStyle: CSSProperties = {
   background: C.accent,
-  color: '#fff',
+  color: '#ffffff',
   border: 'none',
-  borderRadius: 6,
-  padding: '0.55rem 0.8rem',
+  borderRadius: 0,
+  padding: '0.6rem 0.9rem',
   fontSize: 12,
   fontFamily: 'inherit',
-  fontWeight: 800,
+  fontWeight: 700,
+  letterSpacing: '0.02em',
 };
 
 const hashStyle: CSSProperties = {
