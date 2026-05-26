@@ -34,6 +34,6 @@ Run this before handing off the repo.
 - `README.md` gives a clear reviewer quickstart.
 - `docs/DEMO_SCRIPT.md` describes the intended click path.
 - `docs/DESIGN.md` explains `VENUE_WEIGHTED_TWAP_V1` deeply and matches the code.
-- `BUILD_PLAN.md` is treated as historical context where it conflicts with `VENUE_WEIGHTED_TWAP_V1`.
+- No internal planning, local-tool, or work-session artifacts are tracked.
 - `DEPLOY.md` separates hosted env requirements from local defaults.
 - Known simplifications are explicit and framed as local-demo tradeoffs.
