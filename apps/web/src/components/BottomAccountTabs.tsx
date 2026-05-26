@@ -277,9 +277,22 @@ function OpenOrdersTab({
 }
 
 function PublicTradesTab({ trades }: { trades: Trade[] }) {
-  if (trades.length === 0) return <Empty label="No public trades yet" />;
+  const helper = (
+    <div style={publicTradesHelperStyle}>
+      Public market trades, including simulated bot activity.
+    </div>
+  );
+  if (trades.length === 0) {
+    return (
+      <>
+        {helper}
+        <Empty label="No public trades yet" />
+      </>
+    );
+  }
   return (
     <>
+      {helper}
       <div style={tradeHeaderStyle}>
         <span>Age</span>
         <span>Aggressor</span>
@@ -498,6 +511,13 @@ const orderRowStyle: CSSProperties = {
 const tradeHeaderStyle: CSSProperties = {
   ...orderHeaderStyle,
   gridTemplateColumns: '0.8fr 1.3fr 1fr 0.8fr',
+};
+
+const publicTradesHelperStyle: CSSProperties = {
+  color: C.textDim,
+  fontSize: 11,
+  letterSpacing: '0.02em',
+  padding: `${S.sm}px 0 ${S.xs}px`,
 };
 
 const tradeRowStyle: CSSProperties = {
