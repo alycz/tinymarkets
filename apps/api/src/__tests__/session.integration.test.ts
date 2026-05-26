@@ -99,6 +99,14 @@ describe('MarketSession integration', () => {
     vi.useRealTimers();
   });
 
+  it('initializes demo users and takers with $1,000 and the market maker with $1,000,000', () => {
+    session.startDemo();
+
+    expect(session.getUserSnapshot('demo-user' as UserId)!.balance.availableBalanceCents).toBe(100_000);
+    expect(session.getUserSnapshot('taker-001' as UserId)!.balance.availableBalanceCents).toBe(100_000);
+    expect(session.getUserSnapshot('market-maker-1' as UserId)!.balance.availableBalanceCents).toBe(100_000_000);
+  });
+
   it('order placement: fill path emits expected broadcasts', () => {
     session.startDemo();
     const marketId = session.getMarketId()!;
@@ -604,6 +612,7 @@ describe('MarketSession integration', () => {
     });
 
     const statusesBefore = stub.marketStatuses.length;
+    const snapshotsBefore = stub.marketSnapshots.length;
 
     // Advance past the full 2-minute duration + the 2s resolve timeout
     vi.advanceTimersByTime(2 * 60 * 1000 + 3000);
@@ -620,6 +629,10 @@ describe('MarketSession integration', () => {
     expect(stub.marketResolveds[0]!.resolution).toBeDefined();
     expect(stub.marketResolveds[0]!.resolution.method).toBe('VENUE_WEIGHTED_TWAP_V1');
     expect(stub.marketResolveds[0]!.resolution.outcome).toMatch(/^(YES|NO)$/);
+    const snapshots = stub.marketSnapshots.slice(snapshotsBefore);
+    const resolvedSnapshot = snapshots.find((s) => s.status === 'resolved');
+    expect(resolvedSnapshot?.resolution).toBeDefined();
+    expect(resolvedSnapshot?.resolution?.method).toBe('VENUE_WEIGHTED_TWAP_V1');
 
     // pnl_update for userA and userB (the holders)
     expect(stub.userResolutions.length).toBeGreaterThan(0);

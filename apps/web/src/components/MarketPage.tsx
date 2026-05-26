@@ -53,7 +53,6 @@ interface Props {
   sharePriceHistory: SharePricePoint[];
   userId: string;
   apiUrl: string;
-  onStartNew: () => void;
 }
 
 export default function MarketPage({
@@ -78,7 +77,6 @@ export default function MarketPage({
   sharePriceHistory,
   userId,
   apiUrl,
-  onStartNew,
 }: Props) {
   const [ticketSelection, setTicketSelection] = useState<{
     intent: OrderIntent;
@@ -193,14 +191,6 @@ export default function MarketPage({
     />
   );
 
-  const startNew = (
-    <div style={{ textAlign: 'right', marginTop: S.sm }}>
-      <button onClick={onStartNew} style={newMarketBtn}>
-        Start New Market
-      </button>
-    </div>
-  );
-
   const resolvingBanner =
     marketStatus === 'resolving' ? (
         <div style={resolvingStyle}>
@@ -226,7 +216,6 @@ export default function MarketPage({
       bookTrades={bookTrades}
       tradeTicket={ticket}
       bottomTabs={bottomTabs}
-      footerAction={marketStatus === 'resolved' ? startNew : undefined}
     />
   );
 }
@@ -334,17 +323,4 @@ const resolutionLabel: CSSProperties = {
   fontWeight: 600,
   letterSpacing: '0.02em',
   marginBottom: S.xs,
-};
-
-const newMarketBtn: CSSProperties = {
-  background: C.accent,
-  color: '#ffffff',
-  border: 'none',
-  borderRadius: 0,
-  padding: '0.75rem 1.6rem',
-  cursor: 'pointer',
-  fontSize: 14,
-  fontFamily: 'inherit',
-  fontWeight: 700,
-  letterSpacing: '0.02em',
 };

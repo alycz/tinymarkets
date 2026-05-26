@@ -9,6 +9,10 @@ export const MARKET = {
   durationMs: 120_000,
   /** demo cash per user: $1,000 -> cents */
   startingBalanceCents: 100_000,
+  /** local demo liquidity provider */
+  marketMakerUserId: 'market-maker-1',
+  /** demo cash for the market maker: $1,000,000 -> cents */
+  marketMakerStartingBalanceCents: 100_000_000,
 } as const;
 
 export const ORACLE = {

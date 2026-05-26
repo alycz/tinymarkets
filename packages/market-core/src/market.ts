@@ -8,14 +8,20 @@ import { MARKET } from '@jet/config';
 import { splitMatch } from './classify';
 import { applySegment } from './applyMatch';
 import { settle } from './resolve';
-import type { ResolveResult } from './resolve';
+import type { ResolveResult, StartingBalanceForUser } from './resolve';
+
+interface MarketCoreOptions {
+  startingBalanceCents?: UsdCents;
+  startingBalanceCentsForUser?: StartingBalanceForUser;
+}
 
 export class MarketCore {
   private readonly config: MarketConfig;
   private status: MarketStatus = 'open';
   private readonly openedAtMs: TimestampMs;
   private readonly expiryMs: TimestampMs;
-  private readonly startingBalanceCents: UsdCents;
+  private readonly defaultStartingBalanceCents: UsdCents;
+  private readonly startingBalanceCentsForUser: StartingBalanceForUser;
 
   private oi = 0; // open interest in whole shares
   private lastPrice: PriceCents | undefined;
@@ -24,9 +30,10 @@ export class MarketCore {
   private readonly positions = new Map<UserId, Position>();
   private resolvedResult: ResolveResult | undefined;
 
-  constructor(config: MarketConfig, opts?: { startingBalanceCents?: UsdCents }) {
+  constructor(config: MarketConfig, opts?: MarketCoreOptions) {
     this.config = config;
-    this.startingBalanceCents = opts?.startingBalanceCents ?? usdCents(MARKET.startingBalanceCents);
+    this.defaultStartingBalanceCents = opts?.startingBalanceCents ?? usdCents(MARKET.startingBalanceCents);
+    this.startingBalanceCentsForUser = opts?.startingBalanceCentsForUser ?? (() => this.defaultStartingBalanceCents);
     this.openedAtMs = timestampMs(Date.now());
     this.expiryMs = timestampMs((this.openedAtMs as number) + config.durationMs);
   }
@@ -36,7 +43,7 @@ export class MarketCore {
     if (!bal) {
       bal = {
         userId,
-        availableBalanceCents: this.startingBalanceCents,
+        availableBalanceCents: this.startingBalanceCentsForUser(userId),
         reservedForOrdersCents: usdCents(0),
         lockedSettlementCollateralCents: usdCents(0),
         realizedPnlCents: 0,
@@ -169,7 +176,7 @@ export class MarketCore {
     if (this.resolvedResult) return this.resolvedResult;
 
     this.status = 'resolved';
-    this.resolvedResult = settle(outcome, this.positions, this.balances, this.startingBalanceCents);
+    this.resolvedResult = settle(outcome, this.positions, this.balances, this.startingBalanceCentsForUser);
     this.oi = 0;
     this.lastPrice = oddsPriceCents(outcome === 'YES' ? 99 : 1);
     return this.resolvedResult;

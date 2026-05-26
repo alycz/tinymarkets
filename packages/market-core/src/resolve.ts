@@ -2,6 +2,8 @@ import type { Balance, Position, Side } from '@jet/shared';
 import type { UserId, UsdCents } from '@jet/shared';
 import { usdCents, PAYOUT_CENTS } from '@jet/shared';
 
+export type StartingBalanceForUser = (userId: UserId) => UsdCents;
+
 export interface ResolveResult {
   payouts: ReadonlyMap<UserId, UsdCents>;
   realizedPnlCents: ReadonlyMap<UserId, number>;
@@ -17,7 +19,7 @@ export function settle(
   outcome: Side,
   positions: Map<UserId, Position>,
   balances: Map<UserId, Balance>,
-  startingBalanceCents: UsdCents,
+  startingBalanceCentsForUser: StartingBalanceForUser,
 ): ResolveResult {
   const payouts = new Map<UserId, UsdCents>();
   const realizedPnlCents = new Map<UserId, number>();
@@ -41,7 +43,7 @@ export function settle(
     pos.net = 0 as typeof pos.net;
 
     const finalWealth = (bal.availableBalanceCents as number) + (bal.reservedForOrdersCents as number);
-    const pnl = finalWealth - (startingBalanceCents as number);
+    const pnl = finalWealth - (startingBalanceCentsForUser(userId) as number);
     bal.realizedPnlCents = pnl;
     realizedPnlCents.set(userId, pnl);
   }
@@ -53,7 +55,7 @@ export function settle(
         (bal.availableBalanceCents as number) +
         (bal.reservedForOrdersCents as number) +
         (bal.lockedSettlementCollateralCents as number) -
-        (startingBalanceCents as number);
+        (startingBalanceCentsForUser(userId) as number);
       bal.realizedPnlCents = pnl;
       realizedPnlCents.set(userId, pnl);
     }

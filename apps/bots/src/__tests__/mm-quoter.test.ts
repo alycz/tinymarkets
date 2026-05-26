@@ -12,8 +12,11 @@ const config: MmConfig = {
   levelSizes: [50],
   baseSpreadCents: 5,
   requoteMs: 1000,
+  requoteJitterRatio: 0,
   requoteFairMoveCents: 2,
   volatilityScaleCents: 50_000,
+  sizeJitterMin: 1,
+  sizeJitterMax: 1,
 };
 
 describe('market maker quoter reconciliation', () => {
@@ -55,6 +58,88 @@ describe('market maker quoter reconciliation', () => {
       size: shares(50),
       tif: 'GTC',
     }));
+  });
+
+  it('applies bounded per-level size jitter without changing quote prices', async () => {
+    const api = {
+      getOpenOrders: vi.fn<Pick<ApiClient, 'getOpenOrders'>['getOpenOrders']>().mockResolvedValue([]),
+      cancelOrder: vi.fn<Pick<ApiClient, 'cancelOrder'>['cancelOrder']>().mockResolvedValue({ ok: true, orderId: 'unused' }),
+      placeOrder: vi.fn<Pick<ApiClient, 'placeOrder'>['placeOrder']>().mockResolvedValue({
+        ok: true,
+        order: order({ orderId: 'new', yesAction: 'BUY', yesPriceCents: 48, remaining: 10 }),
+        fills: [],
+        balance: {} as never,
+        position: {} as never,
+      }),
+    };
+    const random = vi.spyOn(Math, 'random')
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(1);
+    const quoter = new Quoter(api as unknown as ApiClient, {
+      ...config,
+      levelSizes: [100],
+      sizeJitterMin: 0.75,
+      sizeJitterMax: 1.35,
+    });
+    quoter.setMarketId('market-1');
+
+    const stats = await quoter.tick(oddsPriceCents(50), {
+      recentVolatilityCents: 0,
+      msRemaining: 60_000,
+      msTotal: 120_000,
+    });
+
+    expect(stats).toEqual({ cancelled: 0, placed: 2 });
+    expect(api.placeOrder).toHaveBeenCalledWith(expect.objectContaining({
+      intent: 'BUY_YES',
+      price: oddsPriceCents(48),
+      size: shares(75),
+    }));
+    expect(api.placeOrder).toHaveBeenCalledWith(expect.objectContaining({
+      intent: 'SELL_YES',
+      price: oddsPriceCents(53),
+      size: shares(135),
+    }));
+    random.mockRestore();
+  });
+
+  it('keeps same-price depth that is above the current jitter target but inside the jitter cap', async () => {
+    const api = {
+      getOpenOrders: vi.fn<Pick<ApiClient, 'getOpenOrders'>['getOpenOrders']>().mockResolvedValue([
+        order({ orderId: 'kept-bid', yesAction: 'BUY', yesPriceCents: 48, remaining: 120 }),
+      ]),
+      cancelOrder: vi.fn<Pick<ApiClient, 'cancelOrder'>['cancelOrder']>().mockResolvedValue({ ok: true, orderId: 'kept-bid' }),
+      placeOrder: vi.fn<Pick<ApiClient, 'placeOrder'>['placeOrder']>().mockResolvedValue({
+        ok: true,
+        order: order({ orderId: 'new', yesAction: 'SELL', yesPriceCents: 53, remaining: 75 }),
+        fills: [],
+        balance: {} as never,
+        position: {} as never,
+      }),
+    };
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0);
+    const quoter = new Quoter(api as unknown as ApiClient, {
+      ...config,
+      levelSizes: [100],
+      sizeJitterMin: 0.75,
+      sizeJitterMax: 1.35,
+    });
+    quoter.setMarketId('market-1');
+
+    const stats = await quoter.tick(oddsPriceCents(50), {
+      recentVolatilityCents: 0,
+      msRemaining: 60_000,
+      msTotal: 120_000,
+    });
+
+    expect(stats).toEqual({ cancelled: 0, placed: 1 });
+    expect(api.cancelOrder).not.toHaveBeenCalled();
+    expect(api.placeOrder).toHaveBeenCalledWith(expect.objectContaining({
+      intent: 'SELL_YES',
+      price: oddsPriceCents(53),
+      size: shares(75),
+    }));
+    random.mockRestore();
   });
 });
 
