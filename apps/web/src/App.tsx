@@ -61,23 +61,49 @@ export default function App() {
     setLaunchError(null);
     setSlowLaunch(false);
     const slowTimer = setTimeout(() => setSlowLaunch(true), 10_000);
-    try {
-      const res = await fetch(`${API_URL}/markets/start-demo`, { method: 'POST' });
-      const data: Result<StartDemoResponse> = await res.json();
-      if (!res.ok || !data.ok || !data.market) {
-        setLaunchError('Unable to start market. Please try again.');
-        return;
-      }
-      setMarketId(data.market.config.marketId);
-      setConfig(data.market.config);
-    } catch {
-      setLaunchError('Unable to start market. Please try again.');
-    } finally {
+    const finishWithError = (message: string): void => {
       clearTimeout(slowTimer);
       setSlowLaunch(false);
       setLaunching(false);
+      setLaunchError(message);
+    };
+    try {
+      const res = await fetch(`${API_URL}/markets/start-demo`, { method: 'POST' });
+      const bodyText = await res.text();
+      let data: Result<StartDemoResponse> | null = null;
+      try {
+        data = bodyText ? (JSON.parse(bodyText) as Result<StartDemoResponse>) : null;
+      } catch {
+        data = null;
+      }
+      const ok = res.ok && data !== null && data.ok && data.market != null;
+      if (!ok) {
+        const backendMsg =
+          data && data.ok === false ? data.error.message : bodyText.trim().slice(0, 200);
+        const message = backendMsg
+          ? `Unable to start market. Please try again.\n${backendMsg}`
+          : 'Unable to start market. Please try again.';
+        finishWithError(message);
+        return;
+      }
+      // Success: keep `launching` true until `marketStatus` arrives via WS,
+      // so the launch panel doesn't briefly flash back to its default state
+      // between the REST response and the first market snapshot.
+      const okData = data as Extract<Result<StartDemoResponse>, { ok: true }>;
+      clearTimeout(slowTimer);
+      setMarketId(okData.market.config.marketId);
+      setConfig(okData.market.config);
+    } catch {
+      finishWithError('Unable to start market. Please try again.');
     }
   }, [launching]);
+
+  useEffect(() => {
+    if (launching && marketId && config && marketStatus) {
+      setLaunching(false);
+      setSlowLaunch(false);
+    }
+  }, [launching, marketId, config, marketStatus]);
 
   return (
     <div style={{ background: C.bg, minHeight: '100vh', fontFamily: sans, color: C.text }}>
@@ -161,7 +187,13 @@ export default function App() {
                 )}
               </div>
             )}
-            {launchError && <div style={launchErrorStyle}>{launchError}</div>}
+            {launchError && (
+              <div style={launchErrorStyle}>
+                {launchError.split('\n').map((line, i) => (
+                  <div key={i}>{line}</div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
