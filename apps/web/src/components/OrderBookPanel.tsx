@@ -1,10 +1,10 @@
 import type { CSSProperties } from 'react';
 import type { OrderBookSnapshot } from '@jet/shared';
-import { C, S } from '../theme.js';
+import { C, S, T, mono } from '../theme.js';
 import { formatPriceCents } from '../format.js';
 import Panel from './Panel.js';
 
-const ROWS = 8;
+const ROWS = 5;
 
 type BookLevel = OrderBookSnapshot['bids'][number];
 
@@ -15,16 +15,23 @@ interface Props {
 
 export default function OrderBookPanel({ snapshot, onSelectLevel }: Props) {
   return (
-    <Panel title="Canonical YES Order Book">
-      <div style={helperStyle}>
-        One YES book. NO price is always 1 - YES.
+    <Panel title="Canonical YES Order Book" bodyPad={false}>
+      <div style={{ padding: S.sm }}>
+        <OrderBookPanelBody snapshot={snapshot} onSelectLevel={onSelectLevel} />
       </div>
+    </Panel>
+  );
+}
+
+export function OrderBookPanelBody({ snapshot, onSelectLevel }: Props) {
+  return (
+    <>
       {!snapshot || (snapshot.bids.length === 0 && snapshot.asks.length === 0) ? (
         <Empty />
       ) : (
         <BookLadder snapshot={snapshot} onSelectLevel={onSelectLevel} />
       )}
-    </Panel>
+    </>
   );
 }
 
@@ -53,10 +60,7 @@ function BookLadder({
           onSelect={() => onSelectLevel(level, 'ask')}
         />
       ))}
-      <div style={midlineStyle}>
-        <span>Spread</span>
-        <span>{formatSpread(bids[0]?.yesPriceCents, asks[0]?.yesPriceCents)}</span>
-      </div>
+      <SpreadRow bids={bids} asks={asks} />
       {bids.map((level) => (
         <BookRow
           key={`bid-${level.yesPriceCents}`}
@@ -73,11 +77,26 @@ function BookLadder({
 
 function Header() {
   return (
-    <div style={{ ...rowStyle, color: C.textMute, fontSize: 10, letterSpacing: '0.08em', marginBottom: S.xs }}>
-      <span>YES</span>
-      <span>NO</span>
-      <span style={{ textAlign: 'right' }}>SIZE</span>
-      <span style={{ textAlign: 'right' }}>TOTAL</span>
+    <div style={{ ...rowStyle, ...T.eyebrow, color: C.textMute, padding: `0 ${S.sm}px`, marginBottom: S.xs }}>
+      <span>Price</span>
+      <span>No</span>
+      <span>Size</span>
+      <span>Total</span>
+    </div>
+  );
+}
+
+function SpreadRow({ bids, asks }: { bids: BookLevel[]; asks: BookLevel[] }) {
+  const spread = formatSpread(bids[0]?.yesPriceCents, asks[0]?.yesPriceCents);
+  const mid = bids[0] && asks[0] ? Math.round((bids[0].yesPriceCents + asks[0].yesPriceCents) / 2) : null;
+  return (
+    <div style={midlineStyle}>
+      <span style={{ color: C.textMute, fontWeight: 700 }}>Spread</span>
+      <span style={{ color: C.textMute }}>
+        {mid != null ? `mid ${formatPriceCents(mid as BookLevel['yesPriceCents'])}` : ''}
+      </span>
+      <span />
+      <span style={{ color: C.text, fontWeight: 700 }}>{spread}</span>
     </div>
   );
 }
@@ -99,8 +118,11 @@ function BookRow({
   const noPriceCents = 100 - yesPriceCents;
   const size = level.size as number;
   const barWidth = maxSize > 0 ? (size / maxSize) * 100 : 0;
-  const barColor = side === 'bid' ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)';
-  const textColor = side === 'bid' ? C.yes : C.no;
+  const isBid = side === 'bid';
+  const barGradient = isBid
+    ? `linear-gradient(to left, rgba(26,166,74,0.22), rgba(26,166,74,0.04))`
+    : `linear-gradient(to left, rgba(244,63,94,0.22), rgba(244,63,94,0.04))`;
+  const textColor = isBid ? C.yes : C.no;
   const title = side === 'ask' ? 'Click to buy YES at this ask' : 'Click to sell YES at this bid';
 
   return (
@@ -108,10 +130,12 @@ function BookRow({
       type="button"
       title={title}
       onClick={onSelect}
-      style={{
-        ...rowStyle,
-        ...buttonRowStyle,
-        color: C.text,
+      style={buttonRowStyle}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'transparent';
       }}
     >
       <div
@@ -121,15 +145,16 @@ function BookRow({
           bottom: 0,
           right: 0,
           width: `${barWidth}%`,
-          background: barColor,
+          background: barGradient,
+          pointerEvents: 'none',
         }}
       />
-      <span style={{ color: textColor, fontWeight: 700, position: 'relative' }}>
-        {formatPriceCents(yesPriceCents)}
-      </span>
-      <span style={{ color: C.textDim, position: 'relative' }}>{formatPriceCents(noPriceCents as typeof yesPriceCents)}</span>
-      <span style={{ color: C.text, textAlign: 'right', position: 'relative' }}>{size}</span>
-      <span style={{ color: C.textDim, textAlign: 'right', position: 'relative' }}>{total}</span>
+      <div style={{ ...rowStyle, position: 'relative', padding: `0 ${S.sm}px` }}>
+        <span style={{ color: textColor, fontWeight: 600 }}>{formatPriceCents(yesPriceCents)}</span>
+        <span style={{ color: C.textMute }}>{formatPriceCents(noPriceCents as typeof yesPriceCents)}</span>
+        <span style={{ color: C.text }}>{size}</span>
+        <span style={{ color: C.textMute }}>{total}</span>
+      </div>
     </button>
   );
 }
@@ -147,28 +172,26 @@ function cumulativeSize(levels: BookLevel[], price: BookLevel['yesPriceCents'], 
 
 function formatSpread(bid?: BookLevel['yesPriceCents'], ask?: BookLevel['yesPriceCents']): string {
   if (bid == null || ask == null) return '--';
-  return `${Math.max(0, ask - bid)} cents`;
+  return `${Math.max(0, ask - bid)}¢`;
 }
 
 function Empty() {
   return (
-    <div style={{ color: C.textMute, fontSize: 13, padding: `${S.lg}px 0`, textAlign: 'center' }}>
+    <div style={{ color: C.textMute, fontSize: 12, padding: `${S.lg}px 0`, textAlign: 'center' }}>
       Waiting for liquidity
     </div>
   );
 }
 
-const helperStyle: CSSProperties = {
-  color: C.textMute,
-  fontSize: 11,
-  marginBottom: S.sm,
-};
-
 const rowStyle: CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: '1fr 1fr 1fr 1fr',
+  gridTemplateColumns: 'repeat(4, 1fr)',
   gap: S.xs,
   alignItems: 'center',
+  fontFamily: mono,
+  fontVariantNumeric: 'tabular-nums',
+  fontSize: 12.5,
+  textAlign: 'right',
 };
 
 const buttonRowStyle: CSSProperties = {
@@ -177,23 +200,23 @@ const buttonRowStyle: CSSProperties = {
   border: 'none',
   background: 'transparent',
   fontFamily: 'inherit',
-  fontSize: 12,
-  padding: `3px ${S.xs}px`,
-  marginBottom: 2,
+  height: 26,
+  padding: 0,
   overflow: 'hidden',
   cursor: 'pointer',
   textAlign: 'left',
+  display: 'flex',
+  alignItems: 'center',
+  transition: 'background 120ms ease',
 };
 
 const midlineStyle: CSSProperties = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
+  ...rowStyle,
+  background: C.panelSoft,
   borderTop: `1px solid ${C.border}`,
   borderBottom: `1px solid ${C.border}`,
-  color: C.textMute,
-  fontSize: 11,
-  fontWeight: 700,
-  padding: `${S.xs}px 0`,
+  borderRadius: 0,
+  padding: `4px ${S.sm}px`,
   margin: `${S.xs}px 0`,
+  height: 26,
 };

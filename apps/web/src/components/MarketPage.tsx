@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import type {
   MarketConfig,
@@ -13,6 +13,7 @@ import type {
   Fill,
   OrderIntent,
   PriceCents,
+  Shares,
   SharePricePoint,
   TimestampMs,
   UserResolutionEvent,
@@ -22,13 +23,12 @@ import { C, S } from '../theme.js';
 import { formatUsdCents } from '../format.js';
 import type { WsStatus } from '../hooks/useWebSocket.js';
 import type { PricePoint } from '../hooks/usePriceHistory.js';
-import MarketHeader from './MarketHeader.js';
-import ChartPanel from './ChartPanel.js';
-import OracleReferencePanel from './OracleReferencePanel.js';
+import TerminalLayout from './TerminalLayout.js';
+import MarketTopBar from './MarketTopBar.js';
+import ChartWorkspace from './ChartWorkspace.js';
 import TradeTicket from './TradeTicket.js';
-import AccountPanel from './AccountPanel.js';
-import OrderBookPanel from './OrderBookPanel.js';
-import TradesFeed from './TradesFeed.js';
+import BookTradesPanel from './BookTradesPanel.js';
+import BottomAccountTabs from './BottomAccountTabs.js';
 import OraclePanel from './OraclePanel.js';
 
 interface Props {
@@ -37,6 +37,7 @@ interface Props {
   msRemaining: number;
   serverTs: TimestampMs | null;
   wsStatus: WsStatus;
+  openInterest: Shares | null;
   oracleSnapshot: IndicativeSnapshot | null;
   resolution: VenueWeightedTwapResolution | null;
   orderBookSnapshot: OrderBookSnapshot | null;
@@ -55,24 +56,13 @@ interface Props {
   onStartNew: () => void;
 }
 
-function useNarrow(breakpoint = 1100) {
-  const [narrow, setNarrow] = useState(
-    () => typeof window !== 'undefined' && window.innerWidth < breakpoint,
-  );
-  useEffect(() => {
-    const h = () => setNarrow(window.innerWidth < breakpoint);
-    window.addEventListener('resize', h);
-    return () => window.removeEventListener('resize', h);
-  }, [breakpoint]);
-  return narrow;
-}
-
 export default function MarketPage({
   config,
   marketStatus,
   msRemaining,
   serverTs,
   wsStatus,
+  openInterest,
   oracleSnapshot,
   resolution,
   orderBookSnapshot,
@@ -90,7 +80,6 @@ export default function MarketPage({
   apiUrl,
   onStartNew,
 }: Props) {
-  const narrow = useNarrow();
   const [ticketSelection, setTicketSelection] = useState<{
     intent: OrderIntent;
     price: PriceCents;
@@ -108,32 +97,39 @@ export default function MarketPage({
       ? (Math.max(1, bestAsk.yesPriceCents - bestBid.yesPriceCents) as PriceCents)
       : null;
 
-  const header = (
-    <MarketHeader
+  const currentPoint = sharePriceHistory.at(-1) ?? null;
+  const demoVolumeCents = trades.reduce(
+    (sum, trade) => sum + (trade.size as number) * (trade.yesPriceCents as number),
+    0,
+  ) as UsdCents;
+
+  const topBar = (
+    <MarketTopBar
       question={config.question}
       thresholdCents={config.thresholdCents}
       marketStatus={marketStatus}
       msRemaining={msRemaining}
-      wsStatus={wsStatus}
       resolution={resolution}
-    />
-  );
-
-  const chart = (
-    <ChartPanel
-      sharePriceHistory={sharePriceHistory}
-      currentPoint={sharePriceHistory.at(-1) ?? null}
+      oracleSnapshot={oracleSnapshot}
+      currentPoint={currentPoint}
       bestBid={bestBid?.yesPriceCents ?? null}
       bestAsk={bestAsk?.yesPriceCents ?? null}
       spread={spread}
+      demoVolumeCents={demoVolumeCents}
+      openInterest={openInterest}
     />
   );
 
-  const oracleReference = (
-    <OracleReferencePanel
-      priceHistory={oraclePriceHistory}
+  const chartWorkspace = (
+    <ChartWorkspace
+      sharePriceHistory={sharePriceHistory}
+      oraclePriceHistory={oraclePriceHistory}
       thresholdCents={config.thresholdCents}
-      currentPriceCents={oracleSnapshot?.btcPriceCents ?? null}
+      currentOraclePriceCents={oracleSnapshot?.btcPriceCents ?? null}
+      currentPoint={currentPoint}
+      bestBid={bestBid?.yesPriceCents ?? null}
+      bestAsk={bestAsk?.yesPriceCents ?? null}
+      spread={spread}
     />
   );
 
@@ -143,30 +139,20 @@ export default function MarketPage({
       userId={userId}
       marketStatus={marketStatus}
       apiUrl={apiUrl}
+      balance={balance}
+      position={position}
+      bestBid={bestBid?.yesPriceCents ?? null}
+      bestAsk={bestAsk?.yesPriceCents ?? null}
       selectedOrder={ticketSelection}
       onOrderAccepted={refreshUserSnapshot}
       onFillsAccepted={recordRecentFills}
     />
   );
 
-  const account = (
-    <AccountPanel
-      balance={balance}
-      position={position}
-      contractMidCents={contractMid}
-      openOrders={openOrders}
-      recentFills={recentFills}
-      resolution={resolution}
-      userResolution={userResolution}
-      userId={userId}
-      apiUrl={apiUrl}
-      onRefreshUser={refreshUserSnapshot}
-    />
-  );
-
-  const book = (
-    <OrderBookPanel
+  const bookTrades = (
+    <BookTradesPanel
       snapshot={orderBookSnapshot}
+      trades={trades}
       onSelectLevel={(level, side) => {
         setTicketSelection({
           intent: side === 'ask' ? 'BUY_YES' : 'SELL_YES',
@@ -176,7 +162,7 @@ export default function MarketPage({
       }}
     />
   );
-  const feed = <TradesFeed trades={trades} />;
+
   const oracle = (
     <OraclePanel
       oracleSnapshot={oracleSnapshot}
@@ -189,6 +175,24 @@ export default function MarketPage({
     />
   );
 
+  const bottomTabs = (
+    <BottomAccountTabs
+      balance={balance}
+      position={position}
+      question={config.question}
+      contractMidCents={contractMid}
+      openOrders={openOrders}
+      recentFills={recentFills}
+      trades={trades}
+      resolution={resolution}
+      userResolution={userResolution}
+      userId={userId}
+      apiUrl={apiUrl}
+      onRefreshUser={refreshUserSnapshot}
+      oraclePanel={oracle}
+    />
+  );
+
   const startNew = (
     <div style={{ textAlign: 'right', marginTop: S.sm }}>
       <button onClick={onStartNew} style={newMarketBtn}>
@@ -197,51 +201,33 @@ export default function MarketPage({
     </div>
   );
 
-  return (
-    <div style={outerStyle}>
-      {header}
-      {marketStatus === 'resolving' && (
+  const resolvingBanner =
+    marketStatus === 'resolving' ? (
         <div style={resolvingStyle}>
-          <strong>Resolving from oracle TWAP...</strong>
-          <span>Trading is disabled while the final reference price is calculated.</span>
+          <strong>Resolving</strong>
+          <span>Final oracle TWAP in progress. Trading disabled.</span>
         </div>
-      )}
-      {resolution && (
+      ) : undefined;
+
+  const resolutionBanner = resolution ? (
         <ResolutionBanner
           resolution={resolution}
           thresholdCents={config.thresholdCents}
           userResolution={userResolution}
         />
-      )}
-      {narrow ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: S.md }}>
-          {chart}
-          {oracleReference}
-          {ticket}
-          {account}
-          {book}
-          {feed}
-          {oracle}
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: S.md }}>
-          <div style={twoColStyle}>
-            {chart}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: S.md }}>
-              {oracleReference}
-              {ticket}
-              {account}
-            </div>
-          </div>
-          <div style={twoColStyle}>
-            {book}
-            {feed}
-          </div>
-          {oracle}
-        </div>
-      )}
-      {marketStatus === 'resolved' && startNew}
-    </div>
+      ) : undefined;
+
+  return (
+    <TerminalLayout
+      topBar={topBar}
+      resolvingBanner={resolvingBanner}
+      resolutionBanner={resolutionBanner}
+      chartWorkspace={chartWorkspace}
+      bookTrades={bookTrades}
+      tradeTicket={ticket}
+      bottomTabs={bottomTabs}
+      footerAction={marketStatus === 'resolved' ? startNew : undefined}
+    />
   );
 }
 
@@ -266,23 +252,17 @@ function ResolutionBanner({
 
   return (
     <div style={{ ...resolutionStyle, borderColor: outcomeColor + '66' }}>
-      <div>
-        <div style={resolutionLabel}>Resolved</div>
-        <div style={{ fontSize: 28, lineHeight: 1, fontWeight: 900, color: outcomeColor }}>
-          {resolution.outcome}
-        </div>
-      </div>
-      <ResolutionStat label="Weighted TWAP reference price" value={formatUsdCents(resolution.resolutionPriceCents)} />
+      <ResolutionStat label="Final Oracle" value={formatUsdCents(resolution.resolutionPriceCents)} />
       <ResolutionStat label="Strike" value={formatUsdCents(thresholdCents)} />
-      <ResolutionStat label="Tie rule" value={resolution.tieRule} />
-      <ResolutionStat label="Your position at resolution" value={formatResolvedPosition(netAtResolution)} />
+      <ResolutionStat label="Your Position" value={formatResolvedPosition(netAtResolution)} />
       <ResolutionStat
-        label="Your result"
-        value={userWon === null ? 'No settled position' : userWon ? 'Won' : 'Lost'}
+        label="Your Result"
+        value={userWon === null ? 'N/A' : userWon ? 'Won' : 'Lost'}
         color={userWon === null ? C.textMute : userWon ? C.yes : C.no}
         emphasize
       />
       <ResolutionStat label="Payout" value={formatUsdCents(payoutCents)} emphasize />
+      <ResolutionStat label="Settled" value={titleCaseOutcome(resolution.outcome)} color={outcomeColor} emphasize />
       <ResolutionStat
         label="Final PnL"
         value={`${pnlCents >= 0 ? '+' : ''}${formatUsdCents(pnlCents as UsdCents)}`}
@@ -305,7 +285,7 @@ function ResolutionStat({
   emphasize?: boolean;
 }) {
   return (
-    <div style={{ minWidth: 132 }}>
+    <div style={{ textAlign: 'center' }}>
       <div style={resolutionLabel}>{label}</div>
       <div style={{ color: color ?? C.text, fontSize: emphasize ? 16 : 14, fontWeight: emphasize ? 800 : 700 }}>
         {value}
@@ -315,35 +295,24 @@ function ResolutionStat({
 }
 
 function formatResolvedPosition(net: number): string {
-  if (net > 0) return `Long ${net} YES`;
-  if (net < 0) return `Long ${Math.abs(net)} NO`;
-  return 'Flat';
+  if (net > 0) return `Long ${net} Above`;
+  if (net < 0) return `Long ${Math.abs(net)} Below`;
+  return 'N/A';
 }
 
-const outerStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: S.md,
-  padding: S.md,
-  background: C.bg,
-  minHeight: '100vh',
-};
-
-const twoColStyle: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '2fr 1fr',
-  gap: S.md,
-};
+function titleCaseOutcome(outcome: 'YES' | 'NO'): string {
+  return outcome === 'YES' ? 'Above' : 'Below';
+}
 
 const resolutionStyle: CSSProperties = {
-  display: 'flex',
+  display: 'grid',
+  gridTemplateColumns: 'repeat(7, 1fr)',
   alignItems: 'center',
-  flexWrap: 'wrap',
-  gap: S.lg,
+  gap: S.xl,
   background: C.panel,
-  border: `1px solid ${C.border}`,
-  borderRadius: 8,
-  padding: S.lg,
+  borderBottom: `1px solid ${C.border}`,
+  borderRadius: 0,
+  padding: `${S.md}px ${S.lg}px`,
 };
 
 const resolvingStyle: CSSProperties = {
@@ -351,31 +320,31 @@ const resolvingStyle: CSSProperties = {
   alignItems: 'center',
   gap: S.sm,
   flexWrap: 'wrap',
-  background: C.panel,
-  border: `1px solid ${C.warn}66`,
-  borderRadius: 8,
-  padding: S.md,
+  background: C.warnSoft,
+  borderBottom: `1px solid ${C.warn}44`,
+  borderRadius: 0,
+  padding: `${S.sm}px ${S.md}px`,
   color: C.text,
-  fontSize: 13,
+  fontSize: 12,
 };
 
 const resolutionLabel: CSSProperties = {
   color: C.textMute,
-  fontSize: 10,
-  fontWeight: 800,
-  letterSpacing: '0.1em',
-  textTransform: 'uppercase',
+  fontSize: 11,
+  fontWeight: 600,
+  letterSpacing: '0.02em',
   marginBottom: S.xs,
 };
 
 const newMarketBtn: CSSProperties = {
   background: C.accent,
-  color: '#fff',
+  color: '#ffffff',
   border: 'none',
-  borderRadius: 6,
-  padding: '0.65rem 1.5rem',
+  borderRadius: 0,
+  padding: '0.75rem 1.6rem',
   cursor: 'pointer',
-  fontSize: '0.9rem',
+  fontSize: 14,
   fontFamily: 'inherit',
-  fontWeight: 600,
+  fontWeight: 700,
+  letterSpacing: '0.02em',
 };
