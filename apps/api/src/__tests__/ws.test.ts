@@ -287,6 +287,48 @@ describe('WebSocket protocol hardening', () => {
     }
   });
 
+  it('broadcasts resolved status, resolution, and resolved snapshot during live resolution', () => {
+    vi.useFakeTimers();
+    const session = new MarketSession();
+    const manager = new WsManager({ heartbeatMs: 60 * 60 * 1000 });
+    const broadcaster = new Broadcaster(manager);
+    try {
+      manager.setSession(session);
+      session.setBroadcaster(broadcaster);
+      const market = session.startDemo();
+
+      const ws = makeFakeWs();
+      manager.addConnection(ws as unknown as WebSocket);
+      manager.subscribe(ws as unknown as WebSocket, [`market:${market.config.marketId}`]);
+
+      vi.advanceTimersByTime(2 * 60 * 1000 + 3000);
+
+      const resolvedStatusIndex = ws.sent.findIndex(
+        (event) =>
+          event.type === 'market_status' &&
+          event.marketId === market.config.marketId &&
+          event.status === 'resolved',
+      );
+      const resolutionIndex = ws.sent.findIndex(
+        (event) => event.type === 'resolution' && event.marketId === market.config.marketId,
+      );
+      const resolvedSnapshotIndex = ws.sent.findIndex(
+        (event) =>
+          event.type === 'market_snapshot' &&
+          event.market.config.marketId === market.config.marketId &&
+          event.market.status === 'resolved' &&
+          event.market.resolution != null,
+      );
+
+      expect(resolvedStatusIndex).toBeGreaterThan(-1);
+      expect(resolutionIndex).toBeGreaterThan(resolvedStatusIndex);
+      expect(resolvedSnapshotIndex).toBeGreaterThan(resolutionIndex);
+    } finally {
+      manager.destroy();
+      session.destroy();
+    }
+  });
+
   it('replays public and user resolution events after reconnect', () => {
     vi.useFakeTimers();
     const session = new MarketSession();

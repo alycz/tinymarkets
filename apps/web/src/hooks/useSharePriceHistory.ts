@@ -1,16 +1,17 @@
-import { useEffect, useState } from 'react';
-import type { ClientMessage, Result, ServerEvent, SharePricePoint, SharePriceSeriesResponse } from '@jet/shared';
+import { useEffect, useRef, useState } from 'react';
+import type { ClientMessage, Result, SharePricePoint, SharePriceSeriesResponse } from '@jet/shared';
 import { sharePriceChannel } from '@jet/shared';
-import type { WsStatus } from './useWebSocket.js';
+import type { WsEventEnvelope, WsStatus } from './useWebSocket.js';
 
 export function useSharePriceHistory(
   marketId: string | null,
   apiUrl: string,
   send: (msg: ClientMessage) => void,
-  lastEvent: ServerEvent | null,
+  events: WsEventEnvelope[],
   wsStatus: WsStatus,
 ): SharePricePoint[] {
   const [history, setHistory] = useState<SharePricePoint[]>([]);
+  const lastProcessedSeqRef = useRef(0);
 
   useEffect(() => {
     setHistory([]);
@@ -34,14 +35,20 @@ export function useSharePriceHistory(
   }, [marketId, wsStatus, send]);
 
   useEffect(() => {
-    if (!lastEvent || !marketId) return;
-    if (lastEvent.type === 'share_price_snapshot' && lastEvent.marketId === marketId) {
-      setHistory(lastEvent.points.slice(-600));
-      return;
+    if (!marketId) return;
+
+    for (const { seq, event } of events) {
+      if (seq <= lastProcessedSeqRef.current) continue;
+      lastProcessedSeqRef.current = seq;
+
+      if (event.type === 'share_price_snapshot' && event.marketId === marketId) {
+        setHistory(event.points.slice(-600));
+        continue;
+      }
+      if (event.type !== 'share_price' || event.point.marketId !== marketId) continue;
+      setHistory((prev) => [...prev, event.point].slice(-600));
     }
-    if (lastEvent.type !== 'share_price' || lastEvent.point.marketId !== marketId) return;
-    setHistory((prev) => [...prev, lastEvent.point].slice(-600));
-  }, [lastEvent, marketId]);
+  }, [events, marketId]);
 
   return history;
 }

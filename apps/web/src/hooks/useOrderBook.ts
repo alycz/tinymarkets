@@ -1,16 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
-import type { ClientMessage, ServerEvent, OrderBookSnapshot } from '@jet/shared';
+import type { ClientMessage, OrderBookSnapshot } from '@jet/shared';
 import { bookChannel } from '@jet/shared';
-import type { WsStatus } from './useWebSocket.js';
+import type { WsEventEnvelope, WsStatus } from './useWebSocket.js';
 
 export function useOrderBook(
   marketId: string | null,
   send: (msg: ClientMessage) => void,
-  lastEvent: ServerEvent | null,
+  events: WsEventEnvelope[],
   wsStatus: WsStatus,
 ): { snapshot: OrderBookSnapshot | null } {
   const [snapshot, setSnapshot] = useState<OrderBookSnapshot | null>(null);
   const seqRef = useRef(0);
+  const lastProcessedSeqRef = useRef(0);
 
   useEffect(() => {
     setSnapshot(null);
@@ -23,48 +24,53 @@ export function useOrderBook(
   }, [marketId, wsStatus, send]);
 
   useEffect(() => {
-    if (!lastEvent || !marketId) return;
+    if (!marketId) return;
 
-    if (lastEvent.type === 'orderbook_snapshot' && lastEvent.book.marketId === marketId) {
-      setSnapshot(lastEvent.book);
-      seqRef.current = lastEvent.book.seq;
-      return;
-    }
+    for (const { seq, event } of events) {
+      if (seq <= lastProcessedSeqRef.current) continue;
+      lastProcessedSeqRef.current = seq;
 
-    if (lastEvent.type === 'orderbook_delta' && lastEvent.delta.marketId === marketId) {
-      const delta = lastEvent.delta;
-      if (delta.seq !== seqRef.current + 1) {
-        send({ type: 'unsubscribe', channels: [bookChannel(marketId)] });
-        send({ type: 'subscribe', channels: [bookChannel(marketId)] });
-        return;
+      if (event.type === 'orderbook_snapshot' && event.book.marketId === marketId) {
+        setSnapshot(event.book);
+        seqRef.current = event.book.seq;
+        continue;
       }
-      setSnapshot((prev) => {
-        if (!prev) return prev;
-        const newBids = [...prev.bids];
-        const newAsks = [...prev.asks];
-        for (const change of delta.changes) {
-          const levels = change.side === 'BID' ? newBids : newAsks;
-          const idx = levels.findIndex((l) => l.yesPriceCents === change.yesPriceCents);
-          if (change.size === 0) {
-            if (idx !== -1) levels.splice(idx, 1);
-          } else if (idx !== -1) {
-            // noUncheckedIndexedAccess: idx is known valid, assert defined
-            levels[idx] = { ...levels[idx]!, size: change.size, orderCount: change.orderCount };
-          } else {
-            levels.push({
-              yesPriceCents: change.yesPriceCents,
-              size: change.size,
-              orderCount: change.orderCount,
-            });
-          }
+
+      if (event.type === 'orderbook_delta' && event.delta.marketId === marketId) {
+        const delta = event.delta;
+        if (delta.seq !== seqRef.current + 1) {
+          send({ type: 'unsubscribe', channels: [bookChannel(marketId)] });
+          send({ type: 'subscribe', channels: [bookChannel(marketId)] });
+          continue;
         }
-        newBids.sort((a, b) => b.yesPriceCents - a.yesPriceCents);
-        newAsks.sort((a, b) => a.yesPriceCents - b.yesPriceCents);
-        return { ...prev, bids: newBids, asks: newAsks, seq: delta.seq, ts: delta.ts };
-      });
-      seqRef.current = delta.seq;
+        setSnapshot((prev) => {
+          if (!prev) return prev;
+          const newBids = [...prev.bids];
+          const newAsks = [...prev.asks];
+          for (const change of delta.changes) {
+            const levels = change.side === 'BID' ? newBids : newAsks;
+            const idx = levels.findIndex((l) => l.yesPriceCents === change.yesPriceCents);
+            if (change.size === 0) {
+              if (idx !== -1) levels.splice(idx, 1);
+            } else if (idx !== -1) {
+              // noUncheckedIndexedAccess: idx is known valid, assert defined
+              levels[idx] = { ...levels[idx]!, size: change.size, orderCount: change.orderCount };
+            } else {
+              levels.push({
+                yesPriceCents: change.yesPriceCents,
+                size: change.size,
+                orderCount: change.orderCount,
+              });
+            }
+          }
+          newBids.sort((a, b) => b.yesPriceCents - a.yesPriceCents);
+          newAsks.sort((a, b) => a.yesPriceCents - b.yesPriceCents);
+          return { ...prev, bids: newBids, asks: newAsks, seq: delta.seq, ts: delta.ts };
+        });
+        seqRef.current = delta.seq;
+      }
     }
-  }, [lastEvent, marketId, send]);
+  }, [events, marketId, send]);
 
   return { snapshot };
 }

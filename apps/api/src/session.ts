@@ -606,8 +606,8 @@ export class MarketSession {
 
     const state = this.buildMarketState();
     this.broadcaster?.marketStatus(state);
-    this.broadcaster?.marketSnapshot(state, this.buildMarketSnapshotParts());
     this.broadcaster?.marketResolved(state, resolution);
+    this.broadcaster?.marketSnapshot(state, this.buildMarketSnapshotParts());
 
     for (const [userId, pnlCents] of realizedPnlCents) {
       const bal = this.marketCore.getBalance(userId);
