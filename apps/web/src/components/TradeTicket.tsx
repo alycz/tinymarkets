@@ -254,6 +254,14 @@ export default function TradeTicket({
     }
   }
 
+  if (marketStatus === 'resolved') {
+    return (
+      <div style={containerStyle}>
+        <div style={resolvedTicketBodyStyle}>Market Resolved — Trading Disabled</div>
+      </div>
+    );
+  }
+
   const costLabel =
     estimates == null
       ? ''
@@ -669,6 +677,19 @@ const ticketBodyStyle: CSSProperties = {
   minHeight: 0,
   overflow: 'auto',
   flex: 1,
+};
+
+const resolvedTicketBodyStyle: CSSProperties = {
+  flex: 1,
+  minHeight: 220,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: S.lg,
+  color: C.warn,
+  fontSize: 13,
+  fontWeight: 700,
+  textAlign: 'center',
 };
 
 const inputStyle: CSSProperties = {

@@ -56,7 +56,7 @@ export async function buildServer(session: MarketSession, manager: WsManager) {
 function parseCorsOrigins(): Set<string> {
   const raw = process.env['CORS_ORIGIN'];
   if (!raw) {
-    return new Set(['http://localhost:5173', 'http://127.0.0.1:5173']);
+    return new Set(['http://localhost', 'http://127.0.0.1']);
   }
   const origins = raw
     .split(',')
@@ -69,5 +69,15 @@ function parseCorsOrigins(): Set<string> {
 }
 
 function isAllowedOrigin(origin: string | undefined, allowedOrigins: Set<string>): boolean {
-  return origin === undefined || allowedOrigins.has(origin);
+  if (origin === undefined || allowedOrigins.has(origin)) return true;
+
+  let url: URL;
+  try {
+    url = new URL(origin);
+  } catch {
+    return false;
+  }
+
+  const localOrigin = `${url.protocol}//${url.hostname}`;
+  return allowedOrigins.has(localOrigin);
 }

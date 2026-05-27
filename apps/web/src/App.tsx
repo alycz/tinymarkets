@@ -19,16 +19,16 @@ export default function App() {
   const [launchError, setLaunchError] = useState<string | null>(null);
   const [slowLaunch, setSlowLaunch] = useState(false);
 
-  const { send, lastEvent, status } = useWebSocket(WS_URL);
+  const { send, events, status } = useWebSocket(WS_URL);
   const { marketStatus, msRemaining, serverTs, openInterest, oracleSnapshot, resolution } = useMarket(
     marketId,
     API_URL,
     send,
-    lastEvent,
+    events,
     status,
   );
-  const { snapshot: orderBookSnapshot } = useOrderBook(marketId, send, lastEvent, status);
-  const trades = useTrades(marketId, send, lastEvent, status);
+  const { snapshot: orderBookSnapshot } = useOrderBook(marketId, send, events, status);
+  const trades = useTrades(marketId, send, events, status);
   const {
     balance,
     position,
@@ -37,9 +37,9 @@ export default function App() {
     userResolution,
     refreshUserSnapshot,
     recordRecentFills,
-  } = useUser(DEMO_USER_ID, marketId, API_URL, send, lastEvent, status);
+  } = useUser(DEMO_USER_ID, marketId, API_URL, send, events, status);
   const oraclePriceHistory = usePriceHistory(marketId, API_URL, oracleSnapshot);
-  const sharePriceHistory = useSharePriceHistory(marketId, API_URL, send, lastEvent, status);
+  const sharePriceHistory = useSharePriceHistory(marketId, API_URL, send, events, status);
 
   useEffect(() => {
     fetch(`${API_URL}/markets/current`)

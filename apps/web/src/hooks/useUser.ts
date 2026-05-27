@@ -1,7 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type {
   ClientMessage,
-  ServerEvent,
   Balance,
   Position,
   Fill,
@@ -11,14 +10,14 @@ import type {
   UserResolutionEvent,
 } from '@jet/shared';
 import { userChannel } from '@jet/shared';
-import type { WsStatus } from './useWebSocket.js';
+import type { WsEventEnvelope, WsStatus } from './useWebSocket.js';
 
 export function useUser(
   userId: string,
   marketId: string | null,
   apiUrl: string,
   send: (msg: ClientMessage) => void,
-  lastEvent: ServerEvent | null,
+  events: WsEventEnvelope[],
   wsStatus: WsStatus,
 ): {
   balance: Balance | null;
@@ -34,6 +33,7 @@ export function useUser(
   const [openOrders, setOpenOrders] = useState<CanonicalOrder[]>([]);
   const [recentFills, setRecentFills] = useState<Fill[]>([]);
   const [userResolution, setUserResolution] = useState<UserResolutionEvent | null>(null);
+  const lastProcessedSeqRef = useRef(0);
 
   const refreshUserSnapshot = useCallback(async () => {
     if (!userId || !marketId) return;
@@ -71,41 +71,45 @@ export function useUser(
   }, [userId, marketId, wsStatus, refreshUserSnapshot]);
 
   useEffect(() => {
-    if (!lastEvent) return;
-    switch (lastEvent.type) {
-      case 'balance_snapshot':
-      case 'balance_update':
-        if (lastEvent.userId === userId && lastEvent.marketId === marketId) setBalance(lastEvent.balance);
-        break;
-      case 'position_snapshot':
-      case 'position_update':
-        if (
-          lastEvent.userId === userId &&
-          lastEvent.marketId === marketId &&
-          lastEvent.position.userId === userId &&
-          lastEvent.position.marketId === marketId
-        ) {
-          setPosition(lastEvent.position);
-        }
-        break;
-      case 'open_orders_snapshot':
-      case 'open_order':
-        if (lastEvent.userId === userId && lastEvent.marketId === marketId) setOpenOrders(lastEvent.openOrders);
-        break;
-      case 'order_cancelled':
-        if (lastEvent.userId === userId && lastEvent.marketId === marketId) setOpenOrders(lastEvent.openOrders);
-        break;
-      case 'fill':
-        if (lastEvent.userId === userId && lastEvent.marketId === marketId)
-          setRecentFills((prev) => dedupeFills([lastEvent.fill, ...prev]).slice(0, 50));
-        break;
-      case 'pnl_update':
-        if (lastEvent.userId === userId && lastEvent.marketId === marketId) {
-          setUserResolution(lastEvent);
-        }
-        break;
+    for (const { seq, event } of events) {
+      if (seq <= lastProcessedSeqRef.current) continue;
+      lastProcessedSeqRef.current = seq;
+
+      switch (event.type) {
+        case 'balance_snapshot':
+        case 'balance_update':
+          if (event.userId === userId && event.marketId === marketId) setBalance(event.balance);
+          break;
+        case 'position_snapshot':
+        case 'position_update':
+          if (
+            event.userId === userId &&
+            event.marketId === marketId &&
+            event.position.userId === userId &&
+            event.position.marketId === marketId
+          ) {
+            setPosition(event.position);
+          }
+          break;
+        case 'open_orders_snapshot':
+        case 'open_order':
+          if (event.userId === userId && event.marketId === marketId) setOpenOrders(event.openOrders);
+          break;
+        case 'order_cancelled':
+          if (event.userId === userId && event.marketId === marketId) setOpenOrders(event.openOrders);
+          break;
+        case 'fill':
+          if (event.userId === userId && event.marketId === marketId)
+            setRecentFills((prev) => dedupeFills([event.fill, ...prev]).slice(0, 50));
+          break;
+        case 'pnl_update':
+          if (event.userId === userId && event.marketId === marketId) {
+            setUserResolution(event);
+          }
+          break;
+      }
     }
-  }, [lastEvent, marketId, userId]);
+  }, [events, marketId, userId]);
 
   return {
     balance,

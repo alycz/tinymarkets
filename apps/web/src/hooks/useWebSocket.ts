@@ -2,15 +2,19 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { ClientMessage, ServerEvent } from '@jet/shared';
 
 export type WsStatus = 'connecting' | 'connected' | 'disconnected';
+export type WsEventEnvelope = { seq: number; event: ServerEvent };
+
+const MAX_EVENT_LOG = 500;
 
 export function useWebSocket(url: string): {
   send: (msg: ClientMessage) => void;
-  lastEvent: ServerEvent | null;
+  events: WsEventEnvelope[];
   status: WsStatus;
 } {
   const [status, setStatus] = useState<WsStatus>('disconnected');
-  const [lastEvent, setLastEvent] = useState<ServerEvent | null>(null);
+  const [events, setEvents] = useState<WsEventEnvelope[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
+  const seqRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -29,7 +33,9 @@ export function useWebSocket(url: string): {
       ws.onmessage = (event: MessageEvent<string>) => {
         if (cancelled) return;
         try {
-          setLastEvent(JSON.parse(event.data) as ServerEvent);
+          const parsed = JSON.parse(event.data) as ServerEvent;
+          const seq = ++seqRef.current;
+          setEvents((prev) => [...prev, { seq, event: parsed }].slice(-MAX_EVENT_LOG));
         } catch { /* ignore malformed */ }
       };
 
@@ -59,5 +65,5 @@ export function useWebSocket(url: string): {
     }
   }, []);
 
-  return { send, lastEvent, status };
+  return { send, events, status };
 }
