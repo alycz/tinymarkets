@@ -9,3 +9,13 @@ dist/
 coverage/
 *.tsbuildinfo
 .gstack/
+CLAUDE.md
+AGENTS.md
+agents.md
+AGENT.md
+CODEX.md
+.claude/
+.cursor/
+.windsurf/
+.aider*
+.codex/
