@@ -1,5 +1,5 @@
 {
-  "name": "jet-prediction-market",
+  "name": "tiny-prediction-markets",
   "version": "0.1.0",
   "private": true,
   "description": "Short-duration (2-minute) BTC binary prediction market — local demo. One canonical YES order book + signed positions; VENUE_WEIGHTED_TWAP_V1 oracle.",

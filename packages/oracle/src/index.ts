@@ -17,5 +17,5 @@ export { buildIndicative } from './indicative.js';
 export type { BuildIndicativeParams } from './indicative.js';
 export { buildFormingResolution } from './forming-resolution.js';
 export type { BuildFormingResolutionParams } from './forming-resolution.js';
-export { VenueWeightedTwapOracle, RampOracle } from './ramp-oracle.js';
-export type { VenueWeightedTwapOracleConfig, RampOracleConfig } from './ramp-oracle.js';
+export { VenueWeightedTwapOracle } from './ramp-oracle.js';
+export type { VenueWeightedTwapOracleConfig } from './ramp-oracle.js';
