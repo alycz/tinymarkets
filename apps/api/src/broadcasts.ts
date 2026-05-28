@@ -84,6 +84,8 @@ export class Broadcaster {
 
   bookDelta(d: OrderBookDelta): void {
     this.activeMarketId = d.marketId;
+    if (d.changes.length === 0) return;
+
     this.mgr.broadcast(bookChannel(d.marketId), {
       type: 'orderbook_delta',
       marketId: d.marketId,

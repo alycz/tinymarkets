@@ -2,7 +2,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AddressInfo } from 'node:net';
 import WebSocket from 'ws';
 import type { ServerEvent } from '@jet/shared';
-import { oddsPriceCents, shareChannel, sharePriceChannel, shares, userChannel } from '@jet/shared';
+import {
+  bookChannel,
+  oddsPriceCents,
+  shareChannel,
+  sharePriceChannel,
+  shares,
+  timestampMs,
+  userChannel,
+} from '@jet/shared';
 import { buildServer } from '../server.js';
 import { Broadcaster } from '../broadcasts.js';
 import { MarketSession } from '../session.js';
@@ -101,6 +109,50 @@ describe('WebSocket protocol hardening', () => {
 
     live.ws.send(JSON.stringify({ type: 'ping' }));
     expect(await waitForEvent(live, (event) => event.type === 'pong')).toMatchObject({ type: 'pong' });
+  });
+
+  it('suppresses empty book deltas but broadcasts changed levels', () => {
+    const manager = new WsManager({ heartbeatMs: 60_000 });
+    const broadcaster = new Broadcaster(manager);
+    try {
+      const marketId = 'm1';
+      const ws = makeFakeWs();
+      manager.addConnection(ws as unknown as WebSocket);
+      manager.subscribe(ws as unknown as WebSocket, [bookChannel(marketId)]);
+
+      broadcaster.bookDelta({
+        marketId,
+        changes: [],
+        seq: 0,
+        ts: timestampMs(1000),
+      });
+
+      expect(ws.sent.some((event) => event.type === 'orderbook_delta')).toBe(false);
+
+      broadcaster.bookDelta({
+        marketId,
+        changes: [
+          {
+            side: 'BID',
+            yesPriceCents: oddsPriceCents(55),
+            size: shares(10),
+            orderCount: 1,
+          },
+        ],
+        seq: 1,
+        ts: timestampMs(1001),
+      });
+
+      const delta = ws.sent.find((event) => event.type === 'orderbook_delta');
+      expect(delta).toMatchObject({
+        type: 'orderbook_delta',
+        marketId,
+        seq: 1,
+        changes: [expect.objectContaining({ side: 'BID', yesPriceCents: 55 })],
+      });
+    } finally {
+      manager.destroy();
+    }
   });
 
   it('replays open orders when a user channel subscribes', () => {

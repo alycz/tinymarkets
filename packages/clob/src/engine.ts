@@ -41,7 +41,6 @@ export class Clob {
   }
 
   private buildDelta(touched: Map<TouchKey, TouchEntry>): OrderBookDelta {
-    const seq = this.nextSeq();
     const ts = timestampMs(this.now());
     const changes: OrderBookDeltaChange[] = [];
     for (const { side, price } of touched.values()) {
@@ -54,6 +53,7 @@ export class Clob {
         orderCount: this.book.getLevelOrderCount(bookSide, price),
       });
     }
+    const seq = changes.length === 0 ? this.seq : this.nextSeq();
     return { marketId: this.marketId, changes, seq, ts };
   }
 
