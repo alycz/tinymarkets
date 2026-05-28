@@ -23,9 +23,9 @@ export interface VenueWeightedTwapOracleConfig {
 }
 
 /**
- * Drop-in replacement for MockOracle.
- * Uses the real VENUE_WEIGHTED_TWAP_V1 settlement methodology. Simulated deterministic venues are always
- * present so demo resolution never depends solely on live APIs.
+ * Stateful wrapper around the deterministic VENUE_WEIGHTED_TWAP_V1 methodology.
+ * It streams indicative BTC/oracle snapshots during the market and builds the final
+ * replayable resolution payload at settlement.
  */
 export class VenueWeightedTwapOracle {
   private marketId: MarketId | null = null;
@@ -114,6 +114,3 @@ export class VenueWeightedTwapOracle {
     for (const cb of this.callbacks) cb(snapshot);
   }
 }
-
-export type RampOracleConfig = VenueWeightedTwapOracleConfig;
-export const RampOracle = VenueWeightedTwapOracle;
