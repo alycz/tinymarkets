@@ -233,15 +233,18 @@ describe('IOC partial fill', () => {
 describe('IOC zero fill', () => {
   it('no match, no rest, status CANCELLED', () => {
     const clob = makeClob();
+    const before = clob.snapshot();
     // no opposing side
     const { order, matches, delta } = clob.placeOrder(req('YES', 'BUY', 50, 10, 'IOC'));
     expect(order.status).toBe('CANCELLED');
     expect(matches).toHaveLength(0);
     expect(delta.changes).toHaveLength(0);
+    expect(delta.seq).toBe(before.seq);
 
     const snap = clob.snapshot();
     expect(snap.bids).toHaveLength(0);
     expect(snap.asks).toHaveLength(0);
+    expect(snap.seq).toBe(before.seq);
   });
 });
 

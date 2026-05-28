@@ -38,6 +38,13 @@ export function useOrderBook(
 
       if (event.type === 'orderbook_delta' && event.delta.marketId === marketId) {
         const delta = event.delta;
+        if (delta.changes.length === 0) {
+          if (delta.seq >= seqRef.current) {
+            seqRef.current = delta.seq;
+          }
+          continue;
+        }
+
         if (delta.seq !== seqRef.current + 1) {
           send({ type: 'unsubscribe', channels: [bookChannel(marketId)] });
           send({ type: 'subscribe', channels: [bookChannel(marketId)] });

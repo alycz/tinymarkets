@@ -7,7 +7,7 @@ import Panel from './Panel.js';
 const ROWS = 5;
 
 type BookLevel = OrderBookSnapshot['bids'][number];
-type DisplayBookLevel = { level: BookLevel; total: number };
+type DisplayBookLevel = { level: BookLevel | null; total: number | null };
 
 interface Props {
   snapshot: OrderBookSnapshot | null;
@@ -25,55 +25,57 @@ export default function OrderBookPanel({ snapshot, onSelectLevel }: Props) {
 }
 
 export function OrderBookPanelBody({ snapshot, onSelectLevel }: Props) {
-  return (
-    <>
-      {!snapshot || (snapshot.bids.length === 0 && snapshot.asks.length === 0) ? (
-        <Empty />
-      ) : (
-        <BookLadder snapshot={snapshot} onSelectLevel={onSelectLevel} />
-      )}
-    </>
-  );
+  return <BookLadder snapshot={snapshot} onSelectLevel={onSelectLevel} />;
 }
 
 function BookLadder({
   snapshot,
   onSelectLevel,
 }: {
-  snapshot: OrderBookSnapshot;
+  snapshot: OrderBookSnapshot | null;
   onSelectLevel: (level: BookLevel, side: 'bid' | 'ask') => void;
 }) {
-  const bids = snapshot.bids.slice(0, ROWS);
-  const asks = snapshot.asks.slice(0, ROWS);
-  const bidRows = withCumulativeTotals(bids);
-  const askRows = withCumulativeTotals(asks);
-  const allTotals = [...bidRows, ...askRows].map((row) => row.total);
-  const maxTotal = allTotals.length > 0 ? Math.max(...allTotals) : 1;
+  const bids = [...(snapshot?.bids ?? [])]
+    .sort((a, b) => b.yesPriceCents - a.yesPriceCents)
+    .slice(0, ROWS);
+  const asks = [...(snapshot?.asks ?? [])]
+    .sort((a, b) => a.yesPriceCents - b.yesPriceCents)
+    .slice(0, ROWS);
+  const bidRows = buildSideRows(bids);
+  const askRows = buildSideRows(asks);
+  const realTotals = [...bidRows, ...askRows]
+    .map((row) => row.total)
+    .filter((total): total is number => total != null);
+  const maxTotal = Math.max(1, ...realTotals);
 
   return (
     <div>
       <Header />
-      {[...askRows].reverse().map(({ level, total }) => (
-        <BookRow
-          key={`ask-${level.yesPriceCents}`}
-          level={level}
-          total={total}
-          maxTotal={maxTotal}
-          side="ask"
-          onSelect={() => onSelectLevel(level, 'ask')}
-        />
-      ))}
+      {[...askRows].reverse().map((row, i) => {
+        const level = row.level;
+        return (
+          <BookRow
+            key={`ask-slot-${i}`}
+            row={row}
+            maxTotal={maxTotal}
+            side="ask"
+            onSelect={level ? () => onSelectLevel(level, 'ask') : undefined}
+          />
+        );
+      })}
       <SpreadRow bids={bids} asks={asks} />
-      {bidRows.map(({ level, total }) => (
-        <BookRow
-          key={`bid-${level.yesPriceCents}`}
-          level={level}
-          total={total}
-          maxTotal={maxTotal}
-          side="bid"
-          onSelect={() => onSelectLevel(level, 'bid')}
-        />
-      ))}
+      {bidRows.map((row, i) => {
+        const level = row.level;
+        return (
+          <BookRow
+            key={`bid-slot-${i}`}
+            row={row}
+            maxTotal={maxTotal}
+            side="bid"
+            onSelect={level ? () => onSelectLevel(level, 'bid') : undefined}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -109,36 +111,42 @@ function SpreadRow({ bids, asks }: { bids: BookLevel[]; asks: BookLevel[] }) {
 }
 
 function BookRow({
-  level,
-  total,
+  row,
   maxTotal,
   side,
   onSelect,
 }: {
-  level: BookLevel;
-  total: number;
+  row: DisplayBookLevel;
   maxTotal: number;
   side: 'bid' | 'ask';
-  onSelect: () => void;
+  onSelect?: () => void;
 }) {
-  const yesPriceCents = level.yesPriceCents;
-  const noPriceCents = 100 - yesPriceCents;
-  const size = level.size as number;
-  const barWidth = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
+  const { level, total } = row;
+  const yesPriceCents = level?.yesPriceCents ?? null;
+  const noPriceCents = yesPriceCents == null ? null : 100 - yesPriceCents;
+  const size = level == null ? null : (level.size as number);
+  const barWidth = level != null && total != null && maxTotal > 0 ? (total / maxTotal) * 100 : 0;
   const isBid = side === 'bid';
   const barGradient = isBid
     ? `linear-gradient(to left, rgba(26,166,74,0.22), rgba(26,166,74,0.04))`
     : `linear-gradient(to left, rgba(244,63,94,0.22), rgba(244,63,94,0.04))`;
-  const textColor = isBid ? C.yes : C.no;
+  const textColor = level == null ? C.textMute : isBid ? C.yes : C.no;
   const title = side === 'ask' ? 'Click to buy YES at this ask' : 'Click to sell YES at this bid';
 
   return (
     <button
       type="button"
-      title={title}
+      title={level == null ? undefined : title}
+      disabled={level == null}
       onClick={onSelect}
-      style={buttonRowStyle}
+      style={{
+        ...buttonRowStyle,
+        cursor: level == null ? 'default' : 'pointer',
+        color: C.text,
+        opacity: 1,
+      }}
       onMouseEnter={(e) => {
+        if (level == null) return;
         e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
       }}
       onMouseLeave={(e) => {
@@ -158,33 +166,39 @@ function BookRow({
           zIndex: 0,
         }}
       />
-      <span style={{ ...colAlign.price, ...cellStyle, color: textColor, fontWeight: 600 }}>{formatPriceCents(yesPriceCents)}</span>
-      <span style={{ ...colAlign.below, ...cellStyle, color: C.textMute }}>{formatPriceCents(noPriceCents as typeof yesPriceCents)}</span>
-      <span style={{ ...colAlign.size, ...cellStyle, color: C.text }}>{size}</span>
-      <span style={{ ...colAlign.total, ...cellStyle, color: C.textMute }}>{total}</span>
+      <span style={{ ...colAlign.price, ...cellStyle, color: textColor, fontWeight: 600 }}>
+        {yesPriceCents == null ? '--' : formatPriceCents(yesPriceCents)}
+      </span>
+      <span style={{ ...colAlign.below, ...cellStyle, color: C.textMute }}>
+        {noPriceCents == null ? '--' : formatPriceCents(noPriceCents as BookLevel['yesPriceCents'])}
+      </span>
+      <span style={{ ...colAlign.size, ...cellStyle, color: level == null ? C.textMute : C.text }}>
+        {size == null ? '--' : size}
+      </span>
+      <span style={{ ...colAlign.total, ...cellStyle, color: C.textMute }}>
+        {total == null ? '--' : total}
+      </span>
     </button>
   );
 }
 
-function withCumulativeTotals(levels: BookLevel[]): DisplayBookLevel[] {
+function buildSideRows(levels: BookLevel[]): DisplayBookLevel[] {
   let total = 0;
-  return levels.map((level) => {
+  const rows: DisplayBookLevel[] = levels.map((level) => {
     total += level.size as number;
     return { level, total };
   });
+
+  while (rows.length < ROWS) {
+    rows.push({ level: null, total: null });
+  }
+
+  return rows;
 }
 
 function formatSpread(bid?: BookLevel['yesPriceCents'], ask?: BookLevel['yesPriceCents']): string {
   if (bid == null || ask == null) return '--';
   return `${Math.max(0, ask - bid)}¢`;
-}
-
-function Empty() {
-  return (
-    <div style={{ color: C.textMute, fontSize: 12, padding: `${S.lg}px 0`, textAlign: 'center' }}>
-      Waiting for liquidity
-    </div>
-  );
 }
 
 const BOOK_GRID = '64px 1fr 1fr 64px';
